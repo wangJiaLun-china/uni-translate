@@ -8,8 +8,8 @@ mod secrets;
 mod selection;
 mod state;
 mod translate;
-mod tray;
 mod tts;
+mod windows;
 
 use std::sync::Mutex;
 
@@ -26,7 +26,7 @@ pub fn run() {
     tauri::Builder::default()
         // Must come first: a second launch just focuses the running app.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            tray::show_main(app, None);
+            windows::show_main(app);
         }))
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(selection::plugin())
@@ -40,6 +40,7 @@ pub fn run() {
                 history: History::open(&data_dir.join("history.db"))?,
                 tasks: Mutex::default(),
                 pending_selection: Mutex::default(),
+                manage_route: Mutex::default(),
             };
             let hotkey = state.config.get().hotkey;
             app.manage(state);
@@ -47,14 +48,17 @@ pub fn run() {
             if let Err(err) = selection::register(app.handle(), &hotkey) {
                 log::warn!("{err}");
             }
-            tray::create(app.handle())?;
+            windows::create_tray(app.handle())?;
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Closing only hides; the app keeps running in the tray.
+            // Closing the card or the popup only hides it; the app keeps
+            // running in the tray. The settings/history window really closes.
             if let WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
+                if window.label() != windows::MANAGE_LABEL {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -73,6 +77,8 @@ pub fn run() {
             tts::speak,
             tts::split_tts_text,
             selection::take_pending_selection,
+            windows::open_manage,
+            windows::take_manage_route,
         ])
         .run(tauri::generate_context!())
         .expect("error while running uni-translate");

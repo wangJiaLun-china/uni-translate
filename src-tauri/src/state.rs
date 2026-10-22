@@ -23,6 +23,8 @@ pub struct AppState {
     pub tasks: Mutex<HashMap<String, Task>>,
     /// Text grabbed by the hotkey, waiting for the popup to pick it up.
     pub pending_selection: Mutex<Option<String>>,
+    /// Page the settings/history window should open on once it loads.
+    pub manage_route: Mutex<Option<String>>,
 }
 
 impl AppState {
