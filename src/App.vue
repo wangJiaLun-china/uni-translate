@@ -8,8 +8,7 @@ const route = useRoute();
 const bare = computed(() => !!route.meta.bare);
 
 const tabs: { to: string; label: string; icon: IconName }[] = [
-  { to: "/", label: "翻译", icon: "translate" },
-  { to: "/history", label: "历史", icon: "history" },
+  { to: "/history", label: "历史记录", icon: "history" },
   { to: "/settings", label: "设置", icon: "settings" },
 ];
 </script>
@@ -37,6 +36,7 @@ const tabs: { to: string; label: string; icon: IconName }[] = [
   display: flex;
   flex-direction: column;
   height: 100vh;
+  background: var(--bg);
 }
 .topbar {
   display: flex;
@@ -48,12 +48,11 @@ const tabs: { to: string; label: string; icon: IconName }[] = [
 }
 .brand {
   font-weight: 600;
-  letter-spacing: 0.2px;
+  margin-right: 8px;
 }
 .tabs {
   display: flex;
   gap: 4px;
-  margin-left: auto;
 }
 .tab {
   display: inline-flex;

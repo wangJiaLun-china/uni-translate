@@ -12,7 +12,7 @@ import { toasts } from "../composables/useToast";
 .toasts {
   position: fixed;
   left: 50%;
-  top: 64px;
+  top: 12px;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
@@ -27,7 +27,6 @@ import { toasts } from "../composables/useToast";
   background: var(--text);
   color: var(--bg);
   font-size: 13px;
-  box-shadow: var(--shadow);
   text-align: center;
 }
 .toast.error {

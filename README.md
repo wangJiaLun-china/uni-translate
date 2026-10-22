@@ -6,12 +6,14 @@ A lightweight AI translator for any OpenAI-compatible API, built with Tauri 2 (R
 
 ## 功能
 
+- **小卡片**：平时只有一张小卡片。输入原文后按回车，就会按设置好的目标语言显示译文；卡片高度随内容伸缩。原文旁边有播放按钮可以朗读，译文可以一键复制
+- **设置与历史**：点卡片底部的图标，会在单独的大窗口中打开设置或历史记录
 - **流式翻译**：译文逐字显示，可以随时停止
 - **自动识别源语言**：原文已经是目标语言时，自动改译成「第二目标语言」（默认中英互译）
-- **划词翻译**：在任意程序中选中文字，按全局快捷键（默认 `Alt+D`）在光标旁弹出翻译窗口
-- **语音朗读**：通过 OpenAI 兼容的 `/audio/speech` 接口朗读原文和译文，长文本自动分段
+- **划词翻译**：在任意程序中选中文字，按全局快捷键（默认 `Alt+D`），光标旁会弹出同样的翻译卡片
+- **语音朗读**：通过 OpenAI 兼容的 `/audio/speech` 接口朗读，长文本自动分段
 - **翻译历史**：本地 SQLite 保存最近 1000 条，可搜索、复制、朗读、删除
-- **托盘常驻**：关闭窗口只是隐藏，从托盘退出
+- **托盘常驻**：关闭卡片只是隐藏，从托盘菜单退出
 - API Key 保存在系统钥匙串中（macOS 钥匙串 / Windows 凭据管理器 / Linux Secret Service）
 
 ## 配置示例
@@ -68,8 +70,9 @@ cargo test
 
 ```
 src/                    Vue 3 前端
-  views/                翻译、历史、设置、划词弹窗
-  composables/          流式翻译、语音播放、提示
+  components/TranslateCard.vue   翻译卡片（主窗口和划词弹窗共用）
+  views/                卡片、划词弹窗、历史、设置
+  composables/          流式翻译、语音播放、窗口高度自适应、提示
   api/commands.ts       调用 Rust 命令的类型化封装
 src-tauri/src/
   client.rs             OpenAI 兼容客户端：流式 chat、/models、/audio/speech
@@ -79,5 +82,5 @@ src-tauri/src/
   history.rs            SQLite 翻译历史
   config.rs secrets.rs  设置（JSON）与 API Key（系统钥匙串）
   selection.rs          全局快捷键、读取选中文字、弹窗定位
-  tray.rs               托盘菜单
+  windows.rs            设置/历史窗口、托盘菜单
 ```

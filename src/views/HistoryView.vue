@@ -142,6 +142,11 @@ const timeFormat = new Intl.DateTimeFormat("zh-CN", { dateStyle: "short", timeSt
   word-break: break-word;
   user-select: text;
 }
+.result-text {
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 1.7;
+}
 .source {
   color: var(--muted);
   font-size: 13px;

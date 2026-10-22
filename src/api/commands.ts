@@ -48,3 +48,10 @@ export function errorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   return String(err);
 }
+
+export type ManageRoute = "/settings" | "/history";
+
+/** Opens the settings/history window, creating it if needed. */
+export const openManage = (route: ManageRoute) => invoke<void>("open_manage", { route });
+
+export const takeManageRoute = () => invoke<string | null>("take_manage_route");

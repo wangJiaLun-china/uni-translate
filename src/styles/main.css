@@ -1,40 +1,59 @@
+/*
+ * Cool paper and indigo ink. The translation is set in a Chinese serif, like a
+ * dictionary definition; everything else stays in the system sans and quiet.
+ */
 :root {
-  --bg: #f5f6f8;
-  --surface: #ffffff;
-  --text: #1d2129;
-  --muted: #86909c;
-  --border: #e5e6eb;
-  --hover: #f2f3f5;
-  --accent: #4f62ff;
-  --accent-soft: #eef0ff;
-  --danger: #e5484d;
-  --ok: #2f9e62;
-  --radius: 10px;
-  --shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --paper: #fafbfa;
+  --ink: #1e2329;
+  --ink-soft: #6a717b;
+  --rule: #e3e6ea;
+  --indigo: #2f4c80;
+  --on-indigo: #ffffff;
+  --danger: #c2413b;
+  --ok: #2e7d57;
+  --wash: #edf0f2;
+  --indigo-wash: #e6ecf5;
+  --backdrop: #f1f3f2;
+
+  /* Names used by the settings and history pages. */
+  --bg: var(--backdrop);
+  --surface: var(--paper);
+  --text: var(--ink);
+  --muted: var(--ink-soft);
+  --border: var(--rule);
+  --hover: var(--wash);
+  --accent: var(--indigo);
+  --accent-soft: var(--indigo-wash);
+  --radius: 8px;
+
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  /* Falls back to YaHei rather than the thin SimSun on Windows. */
+  --serif: "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", "Noto Serif SC",
+    "Microsoft YaHei", serif;
 
   color-scheme: light dark;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
-    "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  font-family: var(--sans);
   font-size: 14px;
   line-height: 1.5;
-  color: var(--text);
-  background: var(--bg);
+  color: var(--ink);
+  background: var(--paper);
   -webkit-font-smoothing: antialiased;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #17181b;
-    --surface: #202124;
-    --text: #e8e9eb;
-    --muted: #8b8f98;
-    --border: #33353a;
-    --hover: #2a2c30;
-    --accent: #7c8bff;
-    --accent-soft: #2a2e4a;
-    --danger: #ff6369;
-    --ok: #4cc38a;
-    --shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    --paper: #1b1d21;
+    --ink: #e5e7ea;
+    --ink-soft: #9298a2;
+    --rule: #30343b;
+    --indigo: #8fa9da;
+    --on-indigo: #14171c;
+    --danger: #f07a72;
+    --ok: #5fbf8c;
+    --wash: #252830;
+    --indigo-wash: #263247;
+    --backdrop: #15171a;
   }
 }
 
@@ -47,10 +66,10 @@ body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: var(--bg);
+  background: var(--paper);
 }
 
-/* Feels like an app, not a web page: only text areas and results are selectable. */
+/* Feels like an app, not a web page: only text fields and results are selectable. */
 body {
   user-select: none;
 }
@@ -61,6 +80,11 @@ textarea {
 
 a {
   color: var(--accent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: 1px;
 }
 
 .spacer {
@@ -87,31 +111,12 @@ a {
   flex-wrap: wrap;
 }
 
-.banner {
-  padding: 8px 12px;
-  border-radius: var(--radius);
-  background: var(--accent-soft);
-  font-size: 13px;
-}
-
-.pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: var(--hover);
-  color: var(--muted);
-  font-size: 12px;
-  white-space: nowrap;
-}
-
 .input,
 .select {
   height: 32px;
   padding: 0 10px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 6px;
   background: var(--surface);
   color: var(--text);
   font: inherit;
@@ -131,7 +136,7 @@ a {
   height: 32px;
   padding: 0 14px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 6px;
   background: var(--surface);
   color: var(--text);
   font: inherit;
@@ -143,13 +148,13 @@ a {
   background: var(--hover);
 }
 .btn.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--indigo);
+  border-color: var(--indigo);
+  color: var(--on-indigo);
 }
 .btn.primary:hover:not(:disabled) {
-  filter: brightness(1.08);
-  background: var(--accent);
+  background: var(--indigo);
+  filter: brightness(1.1);
 }
 .btn.danger {
   border-color: var(--danger);
@@ -185,7 +190,8 @@ a {
   cursor: default;
 }
 
-input[type="range"] {
+input[type="range"],
+input[type="checkbox"] {
   accent-color: var(--accent);
 }
 
@@ -209,11 +215,18 @@ input[type="range"] {
   height: 1.1em;
   margin-left: 2px;
   vertical-align: text-bottom;
-  background: var(--accent);
+  background: var(--indigo);
   animation: blink 1s steps(1) infinite;
 }
 @keyframes blink {
   50% {
     opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caret,
+  .icon.spin {
+    animation: none;
   }
 }
