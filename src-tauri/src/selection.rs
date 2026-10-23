@@ -1,6 +1,8 @@
 //! Global hotkey: grab the selected text and show it in the popup window.
 
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, State};
+#[cfg(not(target_os = "macos"))]
+use tauri::PhysicalPosition;
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 use crate::error::{AppError, AppResult};
@@ -48,12 +50,20 @@ pub fn replace(app: &AppHandle, old: &str, new: &str) -> AppResult<()> {
 
 fn on_hotkey(app: &AppHandle) {
     let app = app.clone();
+    // Read the cursor before the copy shortcut, which can take half a second.
+    // Waiting until then puts the card wherever the pointer moved.
+    #[cfg(target_os = "macos")]
+    let cursor = macos_mouse_location();
     // Waiting for the copied text can take half a second, so stay off the
     // event loop. The key simulation itself is sent back to the main thread.
     std::thread::spawn(move || {
         let text = selected_text(&app).unwrap_or_default();
         *app.state::<AppState>().pending_selection.lock().unwrap() = Some(text);
-        if let Err(err) = show_popup(&app) {
+        #[cfg(target_os = "macos")]
+        let shown = show_popup_macos(&app, cursor);
+        #[cfg(not(target_os = "macos"))]
+        let shown = show_popup(&app);
+        if let Err(err) = shown {
             log::error!("failed to show popup: {err}");
         }
         let _ = app.emit_to(POPUP_LABEL, SELECTION_EVENT, ());
@@ -66,6 +76,7 @@ pub fn take_pending_selection(state: State<'_, AppState>) -> Option<String> {
     state.pending_selection.lock().unwrap().take()
 }
 
+#[cfg(not(target_os = "macos"))]
 fn show_popup(app: &AppHandle) -> AppResult<()> {
     let popup = app
         .get_webview_window(POPUP_LABEL)
@@ -100,6 +111,126 @@ fn show_popup(app: &AppHandle) -> AppResult<()> {
     popup.unminimize()?;
     popup.set_focus()?;
     Ok(())
+}
+
+/// Gap between the pointer and the card, in screen points.
+const CURSOR_GAP: (f64, f64) = (12.0, 16.0);
+
+/// Top-left of the card in a bottom-left screen coordinate system.
+/// `screen` is `(x, y, width, height)` of the visible area under the pointer.
+fn popup_top_left(
+    cursor: (f64, f64),
+    window: (f64, f64),
+    screen: (f64, f64, f64, f64),
+) -> (f64, f64) {
+    let (cx, cy) = cursor;
+    let (width, height) = window;
+    let (sx, sy, sw, sh) = screen;
+    let right = sx + sw;
+    let top = sy + sh;
+
+    let mut x = cx + CURSOR_GAP.0;
+    if x + width > right {
+        x = cx - width - CURSOR_GAP.0;
+    }
+    x = x.clamp(sx, (right - width).max(sx));
+
+    // `y` is the top edge. A window that would fall through the bottom of the
+    // screen is flipped above the pointer.
+    let mut y = cy - CURSOR_GAP.1;
+    if y - height < sy {
+        y = cy + CURSOR_GAP.1 + height;
+    }
+    y = y.clamp(sy + height, top.max(sy + height));
+    (x, y)
+}
+
+/// Places the card beside the pointer on the screen it is on.
+/// Tauri's position is wrong across displays with different scale factors.
+#[cfg(target_os = "macos")]
+fn show_popup_macos(app: &AppHandle, cursor: objc2_foundation::NSPoint) -> AppResult<()> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let app_for_ui = app.clone();
+    app.run_on_main_thread(move || {
+        let _ = tx.send(place_popup_macos(&app_for_ui, cursor));
+    })?;
+    rx.recv_timeout(std::time::Duration::from_secs(2))
+        .map_err(|_| AppError::invalid("显示弹窗超时"))?
+}
+
+#[cfg(target_os = "macos")]
+fn macos_mouse_location() -> objc2_foundation::NSPoint {
+    objc2_app_kit::NSEvent::mouseLocation()
+}
+
+#[cfg(target_os = "macos")]
+fn place_popup_macos(app: &AppHandle, cursor: objc2_foundation::NSPoint) -> AppResult<()> {
+    use objc2_foundation::{NSPoint, NSRect};
+    use tauri_nspanel::ManagerExt;
+
+    let panel = app
+        .get_webview_panel(POPUP_LABEL)
+        .map_err(|_| AppError::invalid("popup panel missing"))?;
+
+    let frame = panel.as_panel().frame();
+    let mut size = (frame.size.width, frame.size.height);
+    if size.0 < 1.0 || size.1 < 1.0 {
+        size = POPUP_SIZE;
+    }
+    let screen = visible_screen_containing(cursor).unwrap_or(NSRect {
+        origin: NSPoint { x: 0.0, y: 0.0 },
+        size: objc2_foundation::NSSize {
+            width: size.0 + CURSOR_GAP.0 * 2.0,
+            height: size.1 + CURSOR_GAP.1 * 2.0,
+        },
+    });
+    let (x, y) = popup_top_left(
+        (cursor.x, cursor.y),
+        size,
+        (
+            screen.origin.x,
+            screen.origin.y,
+            screen.size.width,
+            screen.size.height,
+        ),
+    );
+
+    panel.as_panel().setFrameTopLeftPoint(NSPoint { x, y });
+    // Takes keyboard focus without activating the app, so macOS neither
+    // switches desktops nor leaves the full-screen app in front.
+    panel.show_and_make_key();
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn visible_screen_containing(
+    cursor: objc2_foundation::NSPoint,
+) -> Option<objc2_foundation::NSRect> {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::NSScreen;
+
+    let marker = MainThreadMarker::new()?;
+    let screens = NSScreen::screens(marker);
+    let mut fallback = None;
+    for index in 0..screens.count() {
+        let screen = screens.objectAtIndex(index);
+        let frame = screen.frame();
+        if contains_point(frame, cursor) {
+            return Some(screen.visibleFrame());
+        }
+        if fallback.is_none() {
+            fallback = Some(screen.visibleFrame());
+        }
+    }
+    fallback
+}
+
+#[cfg(target_os = "macos")]
+fn contains_point(rect: objc2_foundation::NSRect, point: objc2_foundation::NSPoint) -> bool {
+    point.x >= rect.origin.x
+        && point.y >= rect.origin.y
+        && point.x < rect.origin.x + rect.size.width
+        && point.y < rect.origin.y + rect.size.height
 }
 
 /// Linux has a "primary selection" that always holds the selected text.
@@ -209,5 +340,25 @@ mod tests {
         assert!(parse("CommandOrControl+Shift+KeyT").is_ok());
         assert!(parse("Super+Alt+Digit1").is_ok());
         assert!(parse("Alt+").is_err());
+    }
+
+    #[test]
+    fn places_the_card_beside_the_pointer() {
+        let screen = (0.0, 0.0, 1440.0, 900.0);
+        let (x, y) = popup_top_left((400.0, 500.0), (380.0, 220.0), screen);
+        assert_eq!((x, y), (412.0, 484.0));
+    }
+
+    #[test]
+    fn keeps_the_card_on_the_screen_under_the_pointer() {
+        let screen = (-1920.0, 0.0, 1920.0, 1080.0);
+        let (x, y) = popup_top_left((-20.0, 40.0), (380.0, 220.0), screen);
+        assert!(x >= -1920.0 && x + 380.0 <= 0.0);
+        assert!(y - 220.0 >= 0.0 && y <= 1080.0);
+        assert!(
+            x < -20.0,
+            "card should sit to the left of a pointer at the edge"
+        );
+        assert!(y > 40.0, "card should sit above a pointer at the bottom");
     }
 }

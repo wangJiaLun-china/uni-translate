@@ -6,16 +6,19 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 
 use crate::config::write_atomic;
-use crate::error::{AppError, AppResult};
+use crate::error::AppResult;
 
-const SERVICE: &str = "uni-translate";
-
+/// Which API key is being stored. The account name is also the JSON field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum KeyKind {
+    /// OpenAI-compatible translation API key.
     Chat,
+    /// OpenAI-compatible speech API key.
     Tts,
+    /// Baidu speech API key.
     BaiduApiKey,
+    /// Baidu speech secret key.
     BaiduSecretKey,
 }
 
@@ -30,20 +33,18 @@ impl KeyKind {
     }
 }
 
-/// API keys live in the OS keychain. When no keychain is available (common on
-/// minimal Linux desktops) they fall back to a user-only file in the config dir.
+/// API keys live in a user-only file in the app config directory.
+/// The system keychain prompts for the login password, so it is not used.
 pub struct SecretStore {
-    fallback_path: PathBuf,
-    use_keyring: bool,
-    /// Avoids hitting the keychain (and its permission prompts) on every request.
+    path: PathBuf,
+    /// Avoids reading the file again on every request.
     cache: Mutex<HashMap<KeyKind, Option<String>>>,
 }
 
 impl SecretStore {
-    pub fn new(fallback_path: PathBuf) -> Self {
+    pub fn new(path: PathBuf) -> Self {
         Self {
-            fallback_path,
-            use_keyring: true,
+            path,
             cache: Mutex::default(),
         }
     }
@@ -52,9 +53,7 @@ impl SecretStore {
         if let Some(cached) = self.cache.lock().unwrap().get(&kind) {
             return cached.clone();
         }
-        let value = self
-            .keyring_get(kind)
-            .or_else(|| self.read_file().remove(kind.account()));
+        let value = self.read_file().remove(kind.account());
         self.cache.lock().unwrap().insert(kind, value.clone());
         value
     }
@@ -63,52 +62,20 @@ impl SecretStore {
     pub fn set(&self, kind: KeyKind, key: &str) -> AppResult<()> {
         let key = key.trim();
         let mut file = self.read_file();
-        let had_file_entry = file.remove(kind.account()).is_some();
-
         if key.is_empty() {
-            self.keyring_delete(kind);
-        } else if let Err(err) = self.keyring_set(kind, key) {
-            log::warn!("keychain unavailable, storing API key in file: {err}");
+            file.remove(kind.account());
+        } else {
             file.insert(kind.account().to_string(), key.to_string());
         }
-        if had_file_entry || file.contains_key(kind.account()) {
-            self.write_file(&file)?;
-        }
+        self.write_file(&file)?;
 
         let value = (!key.is_empty()).then(|| key.to_string());
         self.cache.lock().unwrap().insert(kind, value);
         Ok(())
     }
 
-    fn keyring_get(&self, kind: KeyKind) -> Option<String> {
-        if !self.use_keyring {
-            return None;
-        }
-        keyring::Entry::new(SERVICE, kind.account())
-            .and_then(|entry| entry.get_password())
-            .ok()
-    }
-
-    fn keyring_set(&self, kind: KeyKind, key: &str) -> AppResult<()> {
-        if !self.use_keyring {
-            return Err(AppError::Secret("keychain disabled".into()));
-        }
-        keyring::Entry::new(SERVICE, kind.account())
-            .and_then(|entry| entry.set_password(key))
-            .map_err(|err| AppError::Secret(err.to_string()))
-    }
-
-    fn keyring_delete(&self, kind: KeyKind) {
-        if !self.use_keyring {
-            return;
-        }
-        if let Ok(entry) = keyring::Entry::new(SERVICE, kind.account()) {
-            let _ = entry.delete_credential();
-        }
-    }
-
     fn read_file(&self) -> HashMap<String, String> {
-        fs::read_to_string(&self.fallback_path)
+        fs::read_to_string(&self.path)
             .ok()
             .and_then(|raw| serde_json::from_str(&raw).ok())
             .unwrap_or_default()
@@ -116,14 +83,14 @@ impl SecretStore {
 
     fn write_file(&self, map: &HashMap<String, String>) -> AppResult<()> {
         if map.is_empty() {
-            let _ = fs::remove_file(&self.fallback_path);
+            let _ = fs::remove_file(&self.path);
             return Ok(());
         }
-        write_atomic(&self.fallback_path, &serde_json::to_vec(map)?)?;
+        write_atomic(&self.path, &serde_json::to_vec(map)?)?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&self.fallback_path, fs::Permissions::from_mode(0o600))?;
+            fs::set_permissions(&self.path, fs::Permissions::from_mode(0o600))?;
         }
         Ok(())
     }
@@ -133,37 +100,35 @@ impl SecretStore {
 mod tests {
     use super::*;
 
-    fn file_only_store() -> (SecretStore, PathBuf) {
+    fn temp_store() -> (SecretStore, PathBuf) {
         let dir = std::env::temp_dir().join(format!("uni-translate-test-{}", uuid::Uuid::new_v4()));
-        let store = SecretStore {
-            fallback_path: dir.join("secrets.json"),
-            use_keyring: false,
-            cache: Mutex::default(),
-        };
+        let store = SecretStore::new(dir.join("secrets.json"));
         (store, dir)
     }
 
     #[test]
-    fn falls_back_to_file_and_deletes() {
-        let (store, dir) = file_only_store();
+    fn stores_keys_in_a_private_file_and_deletes_them() {
+        let (store, dir) = temp_store();
         assert_eq!(store.get(KeyKind::Chat), None);
 
         store.set(KeyKind::Chat, " sk-123 ").unwrap();
         store.set(KeyKind::Tts, "sk-tts").unwrap();
         assert_eq!(store.get(KeyKind::Chat).as_deref(), Some("sk-123"));
 
-        // A fresh store (no cache) reads the same values from disk.
-        let reloaded = SecretStore {
-            fallback_path: store.fallback_path.clone(),
-            use_keyring: false,
-            cache: Mutex::default(),
-        };
+        let reloaded = SecretStore::new(store.path.clone());
         assert_eq!(reloaded.get(KeyKind::Tts).as_deref(), Some("sk-tts"));
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = fs::metadata(&store.path).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
 
         store.set(KeyKind::Chat, "").unwrap();
         store.set(KeyKind::Tts, "").unwrap();
         assert_eq!(store.get(KeyKind::Chat), None);
-        assert!(!store.fallback_path.exists());
+        assert!(!store.path.exists());
         let _ = fs::remove_dir_all(dir);
     }
 

@@ -16,7 +16,7 @@ const props = defineProps<{ mode: "main" | "popup" }>();
 const emit = defineEmits<{ close: [] }>();
 
 const store = useSettingsStore();
-const { result, error, status, busy, detectedLang, targetLang, translate, stop, reset } = useTranslator();
+const { result, error, status, busy, translate, stop, reset } = useTranslator();
 const source = ref("");
 const card = ref<HTMLElement | null>(null);
 const input = ref<HTMLTextAreaElement | null>(null);
@@ -28,11 +28,6 @@ useAutoHeight(card);
 const hasMeaning = computed(
   () => needsSetup.value || !!result.value || !!error.value || status.value === "loading",
 );
-
-const direction = computed(() => {
-  const target = store.langName(targetLang.value ?? store.settings?.targetLang);
-  return detectedLang.value ? `${store.langName(detectedLang.value)} → ${target}` : `译为${target}`;
-});
 
 function run() {
   if (!source.value.trim()) return;
@@ -105,6 +100,10 @@ defineExpose({
         @keydown="onKeydown"
       />
       <div class="corner">
+        <button v-if="busy" class="icon-btn" title="停止" @click="stop"><Icon name="stop" :size="14" /></button>
+        <button v-if="result && !busy" class="icon-btn" title="复制译文" @click="copy">
+          <Icon name="copy" :size="14" />
+        </button>
         <slot name="corner" />
         <button class="icon-btn close" title="关闭（Esc）" @click="emit('close')">
           <Icon name="close" :size="14" />
@@ -122,13 +121,7 @@ defineExpose({
       <p v-else class="pending">正在翻译…</p>
     </section>
 
-    <footer class="meta" data-tauri-drag-region>
-      <span class="direction" data-tauri-drag-region>{{ direction }}</span>
-      <span class="spacer" data-tauri-drag-region />
-      <button v-if="busy" class="icon-btn" title="停止" @click="stop"><Icon name="stop" :size="14" /></button>
-      <button v-if="result && !busy" class="icon-btn" title="复制译文" @click="copy">
-        <Icon name="copy" :size="14" />
-      </button>
+    <footer v-if="$slots.actions" class="meta" data-tauri-drag-region>
       <slot name="actions" />
     </footer>
   </article>
@@ -240,15 +233,12 @@ defineExpose({
   align-items: center;
   gap: 2px;
   min-height: 28px;
+  justify-content: flex-end;
   padding: 0 6px 2px 12px;
-  font-size: 12px;
   color: var(--ink-soft);
 }
 .meta :deep(.icon-btn) {
   width: 24px;
   height: 24px;
-}
-.direction {
-  white-space: nowrap;
 }
 </style>

@@ -5,6 +5,8 @@ mod config;
 mod error;
 mod history;
 mod lang;
+#[cfg(target_os = "macos")]
+mod popup_panel;
 mod secrets;
 mod selection;
 mod state;
@@ -27,15 +29,26 @@ use crate::state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        // Must come first: a second launch just focuses the running app.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+    // Must come first: a second launch just focuses the running app.
+    let builder = tauri::Builder::default().plugin(tauri_plugin_single_instance::init(
+        |app, _args, _cwd| {
             windows::show_main(app);
-        }))
+        },
+    ));
+    #[cfg(target_os = "macos")]
+    let builder = builder.plugin(tauri_nspanel::init());
+    builder
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(selection::plugin())
         .setup(|app| {
+            // A regular app makes macOS jump to the desktop holding its windows
+            // whenever it is activated, so the selection card would open on the
+            // main card's desktop instead of the one being used. Running as a
+            // menu bar app avoids that; the tray opens every window.
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
             let config_dir = app.path().app_config_dir()?;
             let data_dir = app.path().app_data_dir()?;
             let state = AppState {
@@ -55,6 +68,8 @@ pub fn run() {
                 log::warn!("{err}");
             }
             windows::create_tray(app.handle())?;
+            #[cfg(target_os = "macos")]
+            popup_panel::install(app.handle())?;
             Ok(())
         })
         .on_window_event(|window, event| {

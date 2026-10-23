@@ -14,7 +14,7 @@ A lightweight AI translator for any OpenAI-compatible API, built with Tauri 2 (R
 - **语音朗读**：通过 OpenAI 兼容的 `/audio/speech` 接口朗读，长文本自动分段
 - **翻译历史**：本地 SQLite 保存最近 1000 条，可搜索、复制、朗读、删除
 - **托盘常驻**：关闭卡片只是隐藏，点托盘图标可以重新打开，从托盘菜单退出
-- API Key 保存在系统钥匙串中（macOS 钥匙串 / Windows 凭据管理器 / Linux Secret Service）
+- API Key 保存在配置目录下仅本人可读的 `secrets.json`，不写入系统钥匙串
 
 ## 配置示例
 
@@ -47,9 +47,9 @@ BAIDU_API_KEY=… BAIDU_SECRET_KEY=… cargo test live_baidu -- --ignored
 
 ## 平台说明
 
-- **macOS**：划词翻译需要模拟 `⌘C` 读取选中文字，首次使用请在「系统设置 → 隐私与安全性 → 辅助功能」中允许 uni-translate。
+- **macOS**：以菜单栏应用运行，不显示 Dock 图标，翻译卡片、设置和历史都从菜单栏图标打开；这样划词卡片会出现在当前桌面，而不是把你切回主卡片所在的桌面。划词翻译需要模拟 `⌘C` 读取选中文字，首次使用请在「系统设置 → 隐私与安全性 → 辅助功能」中允许 uni-translate。
 - **Windows**：划词翻译通过模拟 `Ctrl+C` 实现，读取后会恢复原来的剪贴板文字。
-- **Linux**：直接读取 X11 的 PRIMARY 选区，不需要模拟按键。Wayland 下全局快捷键和选区读取受合成器限制，可能无法使用。朗读需要系统装有 GStreamer 的 MP3 解码插件（如 `gstreamer1.0-plugins-good`）。没有 Secret Service 时，API Key 会退回保存到配置目录下仅本人可读的 `secrets.json`。
+- **Linux**：直接读取 X11 的 PRIMARY 选区，不需要模拟按键。Wayland 下全局快捷键和选区读取受合成器限制，可能无法使用。朗读需要系统装有 GStreamer 的 MP3 解码插件（如 `gstreamer1.0-plugins-good`）。
 
 ## 开发
 
@@ -90,7 +90,7 @@ src-tauri/src/
   lang.rs               支持的语言、源语言检测
   tts.rs                朗读命令、长文本分段
   history.rs            SQLite 翻译历史
-  config.rs secrets.rs  设置（JSON）与 API Key（系统钥匙串）
+  config.rs secrets.rs  设置（JSON）与 API Key（secrets.json）
   selection.rs          全局快捷键、读取选中文字、弹窗定位
   windows.rs            设置/历史窗口、托盘菜单
 ```

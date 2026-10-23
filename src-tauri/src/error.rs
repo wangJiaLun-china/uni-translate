@@ -16,8 +16,6 @@ pub enum AppError {
     Io(#[from] std::io::Error),
     #[error("JSON 解析失败：{0}")]
     Json(#[from] serde_json::Error),
-    #[error("密钥存储失败：{0}")]
-    Secret(String),
     #[error("{0}")]
     Invalid(String),
     #[error(transparent)]
