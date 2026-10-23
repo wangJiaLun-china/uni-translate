@@ -48,10 +48,10 @@ pub fn replace(app: &AppHandle, old: &str, new: &str) -> AppResult<()> {
 
 fn on_hotkey(app: &AppHandle) {
     let app = app.clone();
-    // Grabbing the selection sleeps and may simulate key presses; keep it off
-    // the event loop.
+    // Waiting for the copied text can take half a second, so stay off the
+    // event loop. The key simulation itself is sent back to the main thread.
     std::thread::spawn(move || {
-        let text = selected_text().unwrap_or_default();
+        let text = selected_text(&app).unwrap_or_default();
         *app.state::<AppState>().pending_selection.lock().unwrap() = Some(text);
         if let Err(err) = show_popup(&app) {
             log::error!("failed to show popup: {err}");
@@ -104,7 +104,7 @@ fn show_popup(app: &AppHandle) -> AppResult<()> {
 
 /// Linux has a "primary selection" that always holds the selected text.
 #[cfg(target_os = "linux")]
-fn selected_text() -> Option<String> {
+fn selected_text(_app: &AppHandle) -> Option<String> {
     use arboard::{Clipboard, GetExtLinux, LinuxClipboardKind};
     let text = Clipboard::new()
         .ok()?
@@ -118,8 +118,7 @@ fn selected_text() -> Option<String> {
 /// Elsewhere, simulate the copy shortcut and read the clipboard, then put the
 /// user's clipboard back.
 #[cfg(any(windows, target_os = "macos"))]
-fn selected_text() -> Option<String> {
-    use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+fn selected_text(app: &AppHandle) -> Option<String> {
     use std::time::Duration;
 
     let mut clipboard = arboard::Clipboard::new().ok()?;
@@ -127,20 +126,9 @@ fn selected_text() -> Option<String> {
     let _ = clipboard.clear();
 
     let copied = (|| -> Option<String> {
-        let mut enigo = Enigo::new(&Settings::default()).ok()?;
-        // The hotkey's modifiers may still be held; release them so the copy
-        // shortcut is not combined with them.
-        for key in [Key::Alt, Key::Shift, Key::Control, Key::Meta] {
-            let _ = enigo.key(key, Direction::Release);
+        if !simulate_copy(app) {
+            return None;
         }
-        #[cfg(windows)]
-        let (modifier, c) = (Key::Control, Key::C);
-        #[cfg(target_os = "macos")]
-        let (modifier, c) = (Key::Meta, Key::Unicode('c'));
-        enigo.key(modifier, Direction::Press).ok()?;
-        let _ = enigo.key(c, Direction::Click);
-        enigo.key(modifier, Direction::Release).ok()?;
-
         for _ in 0..20 {
             std::thread::sleep(Duration::from_millis(25));
             if let Ok(text) = clipboard.get_text() {
@@ -158,8 +146,56 @@ fn selected_text() -> Option<String> {
     copied
 }
 
+/// Posts the copy shortcut. On macOS this has to happen on the main thread:
+/// looking up a character on the current input source from a background
+/// thread trips `dispatch_assert_queue` and aborts the process.
+#[cfg(target_os = "macos")]
+fn simulate_copy(app: &AppHandle) -> bool {
+    let (tx, rx) = std::sync::mpsc::channel();
+    if app
+        .run_on_main_thread(move || {
+            let _ = tx.send(press_copy());
+        })
+        .is_err()
+    {
+        return false;
+    }
+    rx.recv_timeout(std::time::Duration::from_secs(2))
+        .unwrap_or(false)
+}
+
+#[cfg(windows)]
+fn simulate_copy(_app: &AppHandle) -> bool {
+    press_copy()
+}
+
+#[cfg(any(windows, target_os = "macos"))]
+fn press_copy() -> bool {
+    use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+
+    let Ok(mut enigo) = Enigo::new(&Settings::default()) else {
+        return false;
+    };
+    // The hotkey's modifiers may still be held; release them so the copy
+    // shortcut is not combined with them.
+    for key in [Key::Alt, Key::Shift, Key::Control, Key::Meta] {
+        let _ = enigo.key(key, Direction::Release);
+    }
+    #[cfg(windows)]
+    let (modifier, c) = (Key::Control, Key::C);
+    #[cfg(target_os = "macos")]
+    // kVK_ANSI_C. The copy shortcut is this key, not whichever key currently
+    // produces the letter "c" under the active input source.
+    let (modifier, c) = (Key::Meta, Key::Other(0x08));
+    if enigo.key(modifier, Direction::Press).is_err() {
+        return false;
+    }
+    let _ = enigo.key(c, Direction::Click);
+    enigo.key(modifier, Direction::Release).is_ok()
+}
+
 #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
-fn selected_text() -> Option<String> {
+fn selected_text(_app: &AppHandle) -> Option<String> {
     None
 }
 
