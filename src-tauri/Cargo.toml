@@ -1,6 +1,6 @@
 [package]
 name = "uni-translate"
-version = "0.1.0"
+version = "0.1.1"
 description = "A lightweight AI translator for any OpenAI-compatible API"
 authors = ["wangjialun"]
 edition = "2021"

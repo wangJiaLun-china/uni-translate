@@ -57,7 +57,7 @@ jobs:
           releaseName: uni-translate ${{ github.ref_name }}
           releaseBody: |
             Installers for macOS (Apple Silicon and Intel), Windows (NSIS and MSI), and Linux (deb and AppImage).
-            These builds are not code-signed or notarized. On macOS, allow the app in Privacy & Security on first launch.
+            macOS builds are ad-hoc signed so Gatekeeper does not report them as damaged. They are not notarized; allow the app in Privacy & Security on first launch.
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
