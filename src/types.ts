@@ -1,11 +1,16 @@
 // Mirrors the serde types in src-tauri/src.
 
+export type TtsProvider = "openai" | "baidu";
+
 export interface TtsSettings {
+  provider: TtsProvider;
   useSameEndpoint: boolean;
   baseUrl: string;
   model: string;
   voice: string;
   speed: number;
+  /** Baidu voice id (`per`). */
+  baiduVoice: number;
 }
 
 export interface Settings {
@@ -25,7 +30,7 @@ export interface Language {
   english: string;
 }
 
-export type KeyKind = "chat" | "tts";
+export type KeyKind = "chat" | "tts" | "baidu_api_key" | "baidu_secret_key";
 
 export type StreamEvent =
   | { type: "started"; detectedLang: string | null; targetLang: string }

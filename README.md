@@ -33,7 +33,17 @@ A lightweight AI translator for any OpenAI-compatible API, built with Tauri 2 (R
 
 ### 语音朗读
 
-语音使用 `POST {Base URL}/audio/speech`，请求格式与 OpenAI 相同（`model`、`input`、`voice`、`speed`），返回 MP3。默认复用翻译接口的地址和 Key。如果你的翻译服务不提供语音接口，可以取消「复用翻译接口」，单独填写支持该接口的服务。
+在「设置 → 语音朗读」中选择语音服务：
+
+- **OpenAI 兼容接口**：使用 `POST {Base URL}/audio/speech`，请求格式与 OpenAI 相同（`model`、`input`、`voice`、`speed`），返回 MP3。默认复用翻译接口的地址和 Key；如果你的翻译服务不提供语音接口，可以取消「复用翻译接口」，单独填写支持该接口的服务。
+- **百度语音**：使用百度智能云的[短文本在线合成](https://cloud.baidu.com/doc/SPEECH/s/mlbxh7xie)。在[百度智能云控制台](https://console.bce.baidu.com/ai-engine/speech/overview/)创建应用，把 API Key 和 Secret Key 填进设置页即可（设置页里也有直达链接）。音色可以选常用的几种，也可以直接填写音色 ID；精品音色需要先在控制台开通。
+
+用真实的百度 Key 跑一次联调测试：
+
+```bash
+cd src-tauri
+BAIDU_API_KEY=… BAIDU_SECRET_KEY=… cargo test live_baidu -- --ignored
+```
 
 ## 平台说明
 

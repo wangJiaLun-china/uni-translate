@@ -11,10 +11,12 @@ use crate::error::{AppError, AppResult};
 const SERVICE: &str = "uni-translate";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum KeyKind {
     Chat,
     Tts,
+    BaiduApiKey,
+    BaiduSecretKey,
 }
 
 impl KeyKind {
@@ -22,6 +24,8 @@ impl KeyKind {
         match self {
             KeyKind::Chat => "chat",
             KeyKind::Tts => "tts",
+            KeyKind::BaiduApiKey => "baidu_api_key",
+            KeyKind::BaiduSecretKey => "baidu_secret_key",
         }
     }
 }
@@ -161,5 +165,18 @@ mod tests {
         assert_eq!(store.get(KeyKind::Chat), None);
         assert!(!store.fallback_path.exists());
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn key_kinds_serialize_for_the_frontend() {
+        for (kind, name) in [
+            (KeyKind::Chat, "chat"),
+            (KeyKind::Tts, "tts"),
+            (KeyKind::BaiduApiKey, "baidu_api_key"),
+            (KeyKind::BaiduSecretKey, "baidu_secret_key"),
+        ] {
+            assert_eq!(serde_json::to_string(&kind).unwrap(), format!("\"{name}\""));
+            assert_eq!(kind.account(), name);
+        }
     }
 }
