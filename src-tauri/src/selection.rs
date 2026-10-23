@@ -10,7 +10,7 @@ pub const POPUP_LABEL: &str = "popup";
 /// Tells the popup that new text is waiting in `take_pending_selection`.
 pub const SELECTION_EVENT: &str = "popup://selection";
 /// Logical size of the popup, as in `tauri.conf.json`.
-const POPUP_SIZE: (f64, f64) = (400.0, 220.0);
+const POPUP_SIZE: (f64, f64) = (380.0, 220.0);
 
 pub fn plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     tauri_plugin_global_shortcut::Builder::new()

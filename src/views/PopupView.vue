@@ -50,37 +50,17 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <TranslateCard ref="card" mode="popup">
-    <template #top>
-      <div class="bar" data-tauri-drag-region>
-        <button
-          class="icon-btn"
-          :class="{ active: pinned }"
-          :title="pinned ? '取消固定' : '固定，失去焦点时不关闭'"
-          :aria-pressed="pinned"
-          @click="pinned = !pinned"
-        >
-          <Icon name="pin" :size="14" />
-        </button>
-        <button class="icon-btn" title="关闭（Esc）" @click="hide"><Icon name="close" :size="14" /></button>
-      </div>
+  <TranslateCard ref="card" mode="popup" @close="hide">
+    <template #corner>
+      <button
+        class="icon-btn"
+        :class="{ active: pinned }"
+        :title="pinned ? '取消固定' : '固定，失去焦点时不关闭'"
+        :aria-pressed="pinned"
+        @click="pinned = !pinned"
+      >
+        <Icon name="pin" :size="14" />
+      </button>
     </template>
   </TranslateCard>
 </template>
-
-<style scoped>
-/* A thin strip to drag the borderless popup by. */
-.bar {
-  display: flex;
-  justify-content: flex-end;
-  gap: 2px;
-  height: 26px;
-  padding: 2px 4px 0;
-  margin-bottom: -10px;
-  cursor: move;
-}
-.bar .icon-btn {
-  width: 24px;
-  height: 24px;
-}
-</style>

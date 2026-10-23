@@ -10,29 +10,34 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
         "label": "main",
         "title": "uni-translate",
-        "width": 400,
+        "width": 380,
         "height": 200,
         "minWidth": 320,
-        "minHeight": 80,
-        "center": true
+        "minHeight": 48,
+        "center": true,
+        "decorations": false,
+        "transparent": true,
+        "shadow": true
       },
       {
         "label": "popup",
         "title": "uni-translate",
-        "width": 400,
+        "width": 380,
         "height": 220,
         "minWidth": 300,
-        "minHeight": 80,
+        "minHeight": 48,
         "visible": false,
         "decorations": false,
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "resizable": true,
-        "shadow": true
+        "shadow": true,
+        "transparent": true
       }
     ],
     "security": {
