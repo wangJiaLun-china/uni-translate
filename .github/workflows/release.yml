@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: "--target aarch64-apple-darwin --bundles dmg"
+          - platform: macos-latest
+            args: "--target x86_64-apple-darwin --bundles dmg"
+          - platform: ubuntu-24.04
+            args: "--bundles deb,appimage"
+          - platform: windows-latest
+            args: "--bundles nsis,msi"
+    runs-on: ${{ matrix.platform }}
+    env:
+      APPIMAGE_EXTRACT_AND_RUN: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        if: matrix.platform == 'ubuntu-24.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev patchelf xdg-utils
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: uni-translate ${{ github.ref_name }}
+          releaseBody: |
+            Installers for macOS (Apple Silicon and Intel), Windows (NSIS and MSI), and Linux (deb and AppImage).
+            These builds are not code-signed or notarized. On macOS, allow the app in Privacy & Security on first launch.
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
