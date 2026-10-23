@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { computed, nextTick, ref, watch } from "vue";
 import { copyText, openManage } from "../api/commands";
 import { useAutoHeight } from "../composables/useAutoHeight";
@@ -63,6 +64,21 @@ async function copy() {
   toast("已复制译文");
 }
 
+/**
+ * Any part of the card drags the window except buttons. Hold Alt to click
+ * into the text instead (place the caret, select).
+ */
+function onMouseDown(event: MouseEvent) {
+  if (event.button !== 0 || event.altKey) return;
+  const target = event.target as HTMLElement;
+  if (target.closest("button, a")) return;
+  // Leave a scroll bar on a long meaning alone.
+  const scroller = target.closest<HTMLElement>(".meaning");
+  if (scroller && scroller.scrollHeight > scroller.clientHeight && event.offsetX >= scroller.clientWidth) return;
+  event.preventDefault();
+  void getCurrentWindow().startDragging();
+}
+
 function openSettings() {
   void openManage("/settings").catch((err) => toast(String(err), "error"));
 }
@@ -86,9 +102,8 @@ defineExpose({
 </script>
 
 <template>
-  <!-- Drag the borderless window by any blank part of the card. -->
-  <article ref="card" class="card" :class="props.mode" data-tauri-drag-region>
-    <div class="source" data-tauri-drag-region>
+  <article ref="card" class="card" :class="props.mode" @mousedown="onMouseDown">
+    <div class="source">
       <SpeakButton class="pronounce" :text="source" :id="`${props.mode}-source`" />
       <textarea
         ref="input"
@@ -96,6 +111,7 @@ defineExpose({
         rows="1"
         spellcheck="false"
         aria-label="原文"
+        title="拖动卡片可移动窗口，按住 Alt 点击可编辑或选中文字"
         :placeholder="props.mode === 'main' ? '输入要翻译的文字，回车翻译' : '没有取到选中的文字，可以在这里输入'"
         @keydown="onKeydown"
       />
@@ -111,7 +127,7 @@ defineExpose({
       </div>
     </div>
 
-    <section v-if="hasMeaning" class="meaning" aria-live="polite" data-tauri-drag-region>
+    <section v-if="hasMeaning" class="meaning" aria-live="polite">
       <template v-if="needsSetup">
         <p class="pending">填好翻译接口的地址和模型后就能翻译了。</p>
         <button class="btn primary" @click="openSettings">打开设置</button>
@@ -121,7 +137,7 @@ defineExpose({
       <p v-else class="pending">正在翻译…</p>
     </section>
 
-    <footer v-if="$slots.actions" class="meta" data-tauri-drag-region>
+    <footer v-if="$slots.actions" class="meta">
       <slot name="actions" />
     </footer>
   </article>
