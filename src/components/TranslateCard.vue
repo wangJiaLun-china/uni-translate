@@ -13,6 +13,7 @@ import SpeakButton from "./SpeakButton.vue";
  * the meaning below in the configured target language.
  */
 const props = defineProps<{ mode: "main" | "popup" }>();
+const emit = defineEmits<{ close: [] }>();
 
 const store = useSettingsStore();
 const { result, error, status, busy, detectedLang, targetLang, translate, stop, reset } = useTranslator();
@@ -90,10 +91,9 @@ defineExpose({
 </script>
 
 <template>
-  <article ref="card" class="card" :class="props.mode">
-    <slot name="top" />
-
-    <div class="source">
+  <!-- Drag the borderless window by any blank part of the card. -->
+  <article ref="card" class="card" :class="props.mode" data-tauri-drag-region>
+    <div class="source" data-tauri-drag-region>
       <SpeakButton class="pronounce" :text="source" :id="`${props.mode}-source`" />
       <textarea
         ref="input"
@@ -104,9 +104,15 @@ defineExpose({
         :placeholder="props.mode === 'main' ? '输入要翻译的文字，回车翻译' : '没有取到选中的文字，可以在这里输入'"
         @keydown="onKeydown"
       />
+      <div class="corner">
+        <slot name="corner" />
+        <button class="icon-btn close" title="关闭（Esc）" @click="emit('close')">
+          <Icon name="close" :size="14" />
+        </button>
+      </div>
     </div>
 
-    <section v-if="hasMeaning" class="meaning" aria-live="polite">
+    <section v-if="hasMeaning" class="meaning" aria-live="polite" data-tauri-drag-region>
       <template v-if="needsSetup">
         <p class="pending">填好翻译接口的地址和模型后就能翻译了。</p>
         <button class="btn primary" @click="openSettings">打开设置</button>
@@ -116,11 +122,13 @@ defineExpose({
       <p v-else class="pending">正在翻译…</p>
     </section>
 
-    <footer class="meta">
-      <span class="direction">{{ direction }}</span>
-      <span class="spacer" />
-      <button v-if="busy" class="icon-btn" title="停止" @click="stop"><Icon name="stop" /></button>
-      <button v-if="result && !busy" class="icon-btn" title="复制译文" @click="copy"><Icon name="copy" /></button>
+    <footer class="meta" data-tauri-drag-region>
+      <span class="direction" data-tauri-drag-region>{{ direction }}</span>
+      <span class="spacer" data-tauri-drag-region />
+      <button v-if="busy" class="icon-btn" title="停止" @click="stop"><Icon name="stop" :size="14" /></button>
+      <button v-if="result && !busy" class="icon-btn" title="复制译文" @click="copy">
+        <Icon name="copy" :size="14" />
+      </button>
       <slot name="actions" />
     </footer>
   </article>
@@ -133,21 +141,22 @@ defineExpose({
   /* The window follows this height; past it the meaning scrolls. */
   max-height: 560px;
   background: var(--paper);
-}
-.card.popup {
   border: 1px solid var(--rule);
+  /* The window is transparent, so these corners are the window's corners. */
+  border-radius: 12px;
+  overflow: hidden;
 }
 
 .source {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 12px 14px 10px 10px;
+  padding: 8px 6px 6px 8px;
 }
 /* A pronunciation mark, like in a dictionary entry. */
 .pronounce {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   color: var(--indigo);
   background: var(--indigo-wash);
@@ -162,7 +171,7 @@ defineExpose({
   flex: 1;
   min-width: 0;
   max-height: 7.5em;
-  padding: 3px 0;
+  padding: 2px 0;
   border: none;
   outline: none;
   resize: none;
@@ -179,25 +188,39 @@ defineExpose({
   color: var(--ink-soft);
   opacity: 0.7;
 }
+.corner {
+  display: flex;
+  flex-shrink: 0;
+}
+.corner :deep(.icon-btn) {
+  width: 22px;
+  height: 22px;
+  opacity: 0.55;
+}
+.corner :deep(.icon-btn:hover),
+.corner :deep(.icon-btn.active),
+.corner :deep(.icon-btn:focus-visible) {
+  opacity: 1;
+}
 
 .meaning {
   min-height: 0;
   overflow: auto;
-  margin: 0 14px;
-  padding: 12px 0 14px;
+  margin: 0 12px;
+  padding: 8px 0 10px;
   border-top: 1px solid var(--rule);
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 10px;
+  gap: 8px;
 }
 .meaning p {
   margin: 0;
 }
 .text {
   font-family: var(--serif);
-  font-size: 17px;
-  line-height: 1.75;
+  font-size: 16px;
+  line-height: 1.6;
   color: var(--ink);
   white-space: pre-wrap;
   word-break: break-word;
@@ -216,10 +239,14 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 2px;
-  min-height: 36px;
-  padding: 0 8px 4px 14px;
+  min-height: 28px;
+  padding: 0 6px 2px 12px;
   font-size: 12px;
   color: var(--ink-soft);
+}
+.meta :deep(.icon-btn) {
+  width: 24px;
+  height: 24px;
 }
 .direction {
   white-space: nowrap;

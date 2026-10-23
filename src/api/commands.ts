@@ -1,5 +1,6 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import type { HistoryItem, KeyKind, Language, Settings, StreamEvent } from "../types";
 
 export const getSettings = () => invoke<Settings>("get_settings");
@@ -41,6 +42,12 @@ export const clearHistory = () => invoke<void>("clear_history");
 export const takePendingSelection = () => invoke<string | null>("take_pending_selection");
 
 export const copyText = (text: string) => writeText(text);
+
+/** Baidu AI Cloud's speech console, where users get their API keys. */
+export const BAIDU_CONSOLE_URL = "https://console.bce.baidu.com/ai-engine/speech/overview/";
+
+/** Opens the console in the system browser (only this site is allowed). */
+export const openBaiduConsole = () => openUrl(BAIDU_CONSOLE_URL);
 
 /** Commands reject with the error's message string. */
 export function errorMessage(err: unknown): string {

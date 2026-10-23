@@ -6,14 +6,14 @@ A lightweight AI translator for any OpenAI-compatible API, built with Tauri 2 (R
 
 ## 功能
 
-- **小卡片**：平时只有一张小卡片。输入原文后按回车，就会按设置好的目标语言显示译文；卡片高度随内容伸缩。原文旁边有播放按钮可以朗读，译文可以一键复制
+- **小卡片**：平时只有一张小卡片。输入原文后按回车，就会按设置好的目标语言显示译文；卡片高度随内容伸缩。原文旁边有播放按钮可以朗读，译文可以一键复制。卡片没有系统标题栏：按住空白处拖动，点右上角的 × 或按 Esc 关闭
 - **设置与历史**：点卡片底部的图标，会在单独的大窗口中打开设置或历史记录
 - **流式翻译**：译文逐字显示，可以随时停止
 - **自动识别源语言**：原文已经是目标语言时，自动改译成「第二目标语言」（默认中英互译）
 - **划词翻译**：在任意程序中选中文字，按全局快捷键（默认 `Alt+D`），光标旁会弹出同样的翻译卡片
 - **语音朗读**：通过 OpenAI 兼容的 `/audio/speech` 接口朗读，长文本自动分段
 - **翻译历史**：本地 SQLite 保存最近 1000 条，可搜索、复制、朗读、删除
-- **托盘常驻**：关闭卡片只是隐藏，从托盘菜单退出
+- **托盘常驻**：关闭卡片只是隐藏，点托盘图标可以重新打开，从托盘菜单退出
 - API Key 保存在系统钥匙串中（macOS 钥匙串 / Windows 凭据管理器 / Linux Secret Service）
 
 ## 配置示例
@@ -33,7 +33,17 @@ A lightweight AI translator for any OpenAI-compatible API, built with Tauri 2 (R
 
 ### 语音朗读
 
-语音使用 `POST {Base URL}/audio/speech`，请求格式与 OpenAI 相同（`model`、`input`、`voice`、`speed`），返回 MP3。默认复用翻译接口的地址和 Key。如果你的翻译服务不提供语音接口，可以取消「复用翻译接口」，单独填写支持该接口的服务。
+在「设置 → 语音朗读」中选择语音服务：
+
+- **OpenAI 兼容接口**：使用 `POST {Base URL}/audio/speech`，请求格式与 OpenAI 相同（`model`、`input`、`voice`、`speed`），返回 MP3。默认复用翻译接口的地址和 Key；如果你的翻译服务不提供语音接口，可以取消「复用翻译接口」，单独填写支持该接口的服务。
+- **百度语音**：使用百度智能云的[短文本在线合成](https://cloud.baidu.com/doc/SPEECH/s/mlbxh7xie)。在[百度智能云控制台](https://console.bce.baidu.com/ai-engine/speech/overview/)创建应用，把 API Key 和 Secret Key 填进设置页即可（设置页里也有直达链接）。音色可以选常用的几种，也可以直接填写音色 ID；精品音色需要先在控制台开通。
+
+用真实的百度 Key 跑一次联调测试：
+
+```bash
+cd src-tauri
+BAIDU_API_KEY=… BAIDU_SECRET_KEY=… cargo test live_baidu -- --ignored
+```
 
 ## 平台说明
 

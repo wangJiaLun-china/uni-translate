@@ -68,6 +68,11 @@ impl OpenAiClient {
         Self { http }
     }
 
+    /// The shared HTTP client, for services that are not OpenAI-compatible.
+    pub fn http(&self) -> &reqwest::Client {
+        &self.http
+    }
+
     fn request(
         &self,
         method: Method,
@@ -311,20 +316,9 @@ mod tests {
 
     /// Serves one canned HTTP response on a local port and returns its base URL.
     async fn serve_once(status: &'static str, content_type: &'static str, body: String) -> String {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        tokio::spawn(async move {
-            let (mut socket, _) = listener.accept().await.unwrap();
-            let mut buf = vec![0; 64 * 1024];
-            let _ = socket.read(&mut buf).await;
-            let response = format!(
-                "HTTP/1.1 {status}\r\ncontent-type: {content_type}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
-                body.len()
-            );
-            socket.write_all(response.as_bytes()).await.unwrap();
-        });
-        format!("http://{addr}/v1/")
+        let reply = crate::test_server::Reply::new(status, content_type, body);
+        let (base, _) = crate::test_server::serve(vec![reply]).await;
+        format!("{base}/v1/")
     }
 
     fn endpoint(base_url: String) -> Endpoint {

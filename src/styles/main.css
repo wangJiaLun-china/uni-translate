@@ -37,7 +37,6 @@
   font-size: 14px;
   line-height: 1.5;
   color: var(--ink);
-  background: var(--paper);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -66,7 +65,9 @@ body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: var(--paper);
+  /* The card windows are transparent with rounded corners; the card and the
+     settings/history shell paint their own backgrounds. */
+  background: transparent;
 }
 
 /* Feels like an app, not a web page: only text fields and results are selectable. */

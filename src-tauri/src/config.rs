@@ -38,25 +38,41 @@ impl Default for Settings {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TtsProvider {
+    /// An OpenAI-compatible `/audio/speech` endpoint.
+    #[default]
+    Openai,
+    /// Baidu AI Cloud short-text speech synthesis.
+    Baidu,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct TtsSettings {
+    pub provider: TtsProvider,
     /// Reuse the translation `base_url` and API key.
     pub use_same_endpoint: bool,
     pub base_url: String,
     pub model: String,
     pub voice: String,
+    /// Playback speed as a multiple of normal, for both providers.
     pub speed: f32,
+    /// Baidu voice id (`per`), e.g. 0 for 度小美.
+    pub baidu_voice: u32,
 }
 
 impl Default for TtsSettings {
     fn default() -> Self {
         Self {
+            provider: TtsProvider::Openai,
             use_same_endpoint: true,
             base_url: String::new(),
             model: "tts-1".into(),
             voice: "alloy".into(),
             speed: 1.0,
+            baidu_voice: 0,
         }
     }
 }
@@ -173,6 +189,13 @@ mod tests {
         assert_eq!(s.tts.voice, "nova");
         assert_eq!(s.tts.model, "tts-1");
         assert!(s.tts.use_same_endpoint);
+        assert_eq!(s.tts.provider, TtsProvider::Openai);
+        assert_eq!(s.tts.baidu_voice, 0);
+
+        let s: Settings =
+            serde_json::from_str(r#"{"tts":{"provider":"baidu","baiduVoice":5003}}"#).unwrap();
+        assert_eq!(s.tts.provider, TtsProvider::Baidu);
+        assert_eq!(s.tts.baidu_voice, 5003);
     }
 
     #[test]

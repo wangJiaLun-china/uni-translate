@@ -11,8 +11,14 @@ import type { KeyKind, Settings } from "../types";
 const store = useSettingsStore();
 const form = ref<Settings | null>(null);
 /** Keys typed into the form; empty means "keep the saved key". */
-const keys = reactive<Record<KeyKind, string>>({ chat: "", tts: "" });
-const hasKey = reactive<Record<KeyKind, boolean>>({ chat: false, tts: false });
+const KEY_KINDS: KeyKind[] = ["chat", "tts", "baidu_api_key", "baidu_secret_key"];
+const keys = reactive<Record<KeyKind, string>>({ chat: "", tts: "", baidu_api_key: "", baidu_secret_key: "" });
+const hasKey = reactive<Record<KeyKind, boolean>>({
+  chat: false,
+  tts: false,
+  baidu_api_key: false,
+  baidu_secret_key: false,
+});
 const models = ref<string[]>([]);
 const saving = ref(false);
 const loadingModels = ref(false);
@@ -22,8 +28,38 @@ const testResult = ref<{ ok: boolean; message: string } | null>(null);
 const dirty = computed(
   () =>
     !!form.value &&
-    (JSON.stringify(form.value) !== JSON.stringify(store.settings) || !!keys.chat.trim() || !!keys.tts.trim()),
+    (JSON.stringify(form.value) !== JSON.stringify(store.settings) || KEY_KINDS.some((kind) => !!keys[kind].trim())),
 );
+
+/** Common voices from Baidu's docs; premium ones must be enabled in the console first. */
+const BAIDU_VOICES = [
+  { id: 0, name: "度小美（基础）" },
+  { id: 1, name: "度小宇（基础）" },
+  { id: 3, name: "度逍遥（基础）" },
+  { id: 4, name: "度丫丫（基础）" },
+  { id: 5003, name: "度逍遥（精品）" },
+  { id: 5118, name: "度小鹿（精品）" },
+  { id: 106, name: "度博文（精品）" },
+  { id: 110, name: "度小童（精品）" },
+  { id: 111, name: "度小萌（精品）" },
+  { id: 103, name: "度米朵（精品）" },
+  { id: 5, name: "度小娇（精品）" },
+];
+const customVoice = ref(false);
+const voiceChoice = computed<number | "custom">({
+  get: () => {
+    const id = form.value?.tts.baiduVoice ?? 0;
+    return customVoice.value || !BAIDU_VOICES.some((v) => v.id === id) ? "custom" : id;
+  },
+  set: (choice) => {
+    customVoice.value = choice === "custom";
+    if (choice !== "custom" && form.value) form.value.tts.baiduVoice = choice;
+  },
+});
+
+function openConsole() {
+  void api.openBaiduConsole().catch((err) => toast(api.errorMessage(err), "error"));
+}
 
 /** A plain copy; `structuredClone` rejects the store's reactive proxies. */
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
@@ -32,7 +68,8 @@ async function reload() {
   try {
     await store.load();
     form.value = clone(store.settings!);
-    [hasKey.chat, hasKey.tts] = await Promise.all([api.hasApiKey("chat"), api.hasApiKey("tts")]);
+    const saved = await Promise.all(KEY_KINDS.map((kind) => api.hasApiKey(kind)));
+    KEY_KINDS.forEach((kind, i) => (hasKey[kind] = saved[i]));
   } catch (err) {
     toast(api.errorMessage(err), "error");
   }
@@ -46,7 +83,7 @@ async function save(): Promise<boolean> {
   try {
     const saved = await store.save(form.value);
     form.value = clone(saved);
-    for (const kind of ["chat", "tts"] as const) {
+    for (const kind of KEY_KINDS) {
       if (keys[kind].trim()) {
         await api.setApiKey(kind, keys[kind]);
         keys[kind] = "";
@@ -162,43 +199,109 @@ async function previewVoice() {
 
     <section class="card">
       <h2>语音朗读</h2>
-      <p class="muted small">使用 OpenAI 兼容的 <code>/audio/speech</code> 接口，返回 MP3 音频。</p>
-
-      <label class="check">
-        <input v-model="form.tts.useSameEndpoint" type="checkbox" />
-        复用翻译接口的地址和 API Key
-      </label>
-
-      <template v-if="!form.tts.useSameEndpoint">
-        <label class="field">
-          <span>语音接口地址（Base URL）</span>
-          <input v-model="form.tts.baseUrl" class="input" placeholder="例如 https://api.openai.com/v1" spellcheck="false" />
+      <div class="segmented" role="radiogroup" aria-label="语音服务">
+        <label :class="{ on: form.tts.provider === 'openai' }">
+          <input v-model="form.tts.provider" type="radio" value="openai" />
+          OpenAI 兼容接口
         </label>
+        <label :class="{ on: form.tts.provider === 'baidu' }">
+          <input v-model="form.tts.provider" type="radio" value="baidu" />
+          百度语音
+        </label>
+      </div>
+
+      <template v-if="form.tts.provider === 'openai'">
+        <p class="muted small">使用 OpenAI 兼容的 <code>/audio/speech</code> 接口，返回 MP3 音频。</p>
+
+        <label class="check">
+          <input v-model="form.tts.useSameEndpoint" type="checkbox" />
+          复用翻译接口的地址和 API Key
+        </label>
+
+        <template v-if="!form.tts.useSameEndpoint">
+          <label class="field">
+            <span>语音接口地址（Base URL）</span>
+            <input v-model="form.tts.baseUrl" class="input" placeholder="例如 https://api.openai.com/v1" spellcheck="false" />
+          </label>
+          <label class="field">
+            <span>语音接口 API Key</span>
+            <div class="row">
+              <input
+                v-model="keys.tts"
+                class="input"
+                type="password"
+                autocomplete="off"
+                :placeholder="hasKey.tts ? '已保存（留空则不修改）' : ''"
+              />
+              <button v-if="hasKey.tts" class="btn" @click="clearKey('tts')">清除</button>
+            </div>
+          </label>
+        </template>
+
+        <div class="grid-2">
+          <label class="field">
+            <span>语音模型</span>
+            <input v-model="form.tts.model" class="input" placeholder="例如 tts-1" spellcheck="false" />
+          </label>
+          <label class="field">
+            <span>音色</span>
+            <input v-model="form.tts.voice" class="input" placeholder="例如 alloy" spellcheck="false" />
+          </label>
+        </div>
+      </template>
+
+      <template v-else>
+        <p class="muted small">
+          使用百度智能云的短文本在线合成。还没有 Key？
+          <a href="https://console.bce.baidu.com/ai-engine/speech/overview/" @click.prevent="openConsole">
+            去百度智能云申请
+          </a>
+        </p>
+
         <label class="field">
-          <span>语音接口 API Key</span>
+          <span>API Key</span>
           <div class="row">
             <input
-              v-model="keys.tts"
+              v-model="keys.baidu_api_key"
               class="input"
               type="password"
               autocomplete="off"
-              :placeholder="hasKey.tts ? '已保存（留空则不修改）' : ''"
+              spellcheck="false"
+              :placeholder="hasKey.baidu_api_key ? '已保存（留空则不修改）' : ''"
             />
-            <button v-if="hasKey.tts" class="btn" @click="clearKey('tts')">清除</button>
+            <button v-if="hasKey.baidu_api_key" class="btn" @click="clearKey('baidu_api_key')">清除</button>
           </div>
         </label>
-      </template>
+        <label class="field">
+          <span>Secret Key</span>
+          <div class="row">
+            <input
+              v-model="keys.baidu_secret_key"
+              class="input"
+              type="password"
+              autocomplete="off"
+              spellcheck="false"
+              :placeholder="hasKey.baidu_secret_key ? '已保存（留空则不修改）' : ''"
+            />
+            <button v-if="hasKey.baidu_secret_key" class="btn" @click="clearKey('baidu_secret_key')">清除</button>
+          </div>
+        </label>
 
-      <div class="grid-2">
-        <label class="field">
-          <span>语音模型</span>
-          <input v-model="form.tts.model" class="input" placeholder="例如 tts-1" spellcheck="false" />
-        </label>
-        <label class="field">
-          <span>音色</span>
-          <input v-model="form.tts.voice" class="input" placeholder="例如 alloy" spellcheck="false" />
-        </label>
-      </div>
+        <div class="grid-2">
+          <label class="field">
+            <span>音色</span>
+            <select v-model="voiceChoice" class="select">
+              <option v-for="voice in BAIDU_VOICES" :key="voice.id" :value="voice.id">{{ voice.name }}</option>
+              <option value="custom">其他（填写音色 ID）</option>
+            </select>
+          </label>
+          <label v-if="voiceChoice === 'custom'" class="field">
+            <span>音色 ID</span>
+            <input v-model.number="form.tts.baiduVoice" class="input" type="number" min="0" step="1" />
+          </label>
+        </div>
+        <p class="muted small">精品音色需要先在百度智能云控制台开通。</p>
+      </template>
 
       <label class="field">
         <span>语速：{{ form.tts.speed.toFixed(2) }}×</span>
@@ -314,6 +417,35 @@ h2 {
   padding: 10px 0 16px;
   border-top: 1px solid var(--border);
   background: var(--bg);
+}
+/* Two-way choice of speech service. */
+.segmented {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+.segmented label {
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.segmented label.on {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--border);
+}
+.segmented label:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+}
+.segmented input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
 }
 code {
   font-family: ui-monospace, monospace;

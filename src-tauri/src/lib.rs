@@ -1,3 +1,4 @@
+mod baidu;
 mod client;
 mod commands;
 mod config;
@@ -7,6 +8,8 @@ mod lang;
 mod secrets;
 mod selection;
 mod state;
+#[cfg(test)]
+mod test_server;
 mod translate;
 mod tts;
 mod windows;
@@ -15,6 +18,7 @@ use std::sync::Mutex;
 
 use tauri::{Manager, WindowEvent};
 
+use crate::baidu::BaiduTts;
 use crate::client::OpenAiClient;
 use crate::config::ConfigStore;
 use crate::history::History;
@@ -29,6 +33,7 @@ pub fn run() {
             windows::show_main(app);
         }))
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(selection::plugin())
         .setup(|app| {
             let config_dir = app.path().app_config_dir()?;
@@ -37,6 +42,7 @@ pub fn run() {
                 config: ConfigStore::load(config_dir.join("settings.json")),
                 secrets: SecretStore::new(config_dir.join("secrets.json")),
                 client: OpenAiClient::new(),
+                baidu: BaiduTts::new(),
                 history: History::open(&data_dir.join("history.db"))?,
                 tasks: Mutex::default(),
                 pending_selection: Mutex::default(),

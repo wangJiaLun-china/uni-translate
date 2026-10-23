@@ -1,8 +1,11 @@
 use tauri::ipc::Response;
 use tauri::State;
 
+use crate::baidu;
 use crate::client::SpeechRequest;
+use crate::config::TtsProvider;
 use crate::error::{AppError, AppResult};
+use crate::secrets::KeyKind;
 use crate::state::AppState;
 
 /// Longest piece sent in one `/audio/speech` call. Well below the usual 4096
@@ -17,25 +20,57 @@ pub async fn speak(state: State<'_, AppState>, text: String) -> AppResult<Respon
         return Err(AppError::invalid("没有需要朗读的文字"));
     }
     let settings = state.config.get();
-    if settings.tts.model.is_empty() || settings.tts.voice.is_empty() {
-        return Err(AppError::invalid("请先在设置中填写语音模型和音色"));
-    }
-    let endpoint = state.tts_endpoint(&settings);
-    let request = SpeechRequest {
-        model: &settings.tts.model,
-        input: text,
-        voice: &settings.tts.voice,
-        speed: settings.tts.speed,
-        response_format: "mp3",
+    let tts = &settings.tts;
+    let audio = match tts.provider {
+        TtsProvider::Openai => {
+            if tts.model.is_empty() || tts.voice.is_empty() {
+                return Err(AppError::invalid("请先在设置中填写语音模型和音色"));
+            }
+            let endpoint = state.tts_endpoint(&settings);
+            let request = SpeechRequest {
+                model: &tts.model,
+                input: text,
+                voice: &tts.voice,
+                speed: tts.speed,
+                response_format: "mp3",
+            };
+            state.client.speech(&endpoint, &request).await?
+        }
+        TtsProvider::Baidu => {
+            let (Some(api_key), Some(secret_key)) = (
+                state.secrets.get(KeyKind::BaiduApiKey),
+                state.secrets.get(KeyKind::BaiduSecretKey),
+            ) else {
+                return Err(AppError::invalid(
+                    "请先在设置中填写百度语音的 API Key 和 Secret Key",
+                ));
+            };
+            let speed = baidu::speed(tts.speed);
+            state
+                .baidu
+                .synthesize(
+                    state.client.http(),
+                    &api_key,
+                    &secret_key,
+                    text,
+                    tts.baidu_voice,
+                    speed,
+                )
+                .await?
+        }
     };
-    let audio = state.client.speech(&endpoint, &request).await?;
     Ok(Response::new(audio))
 }
 
-/// Splits text into pieces the frontend speaks one after another.
+/// Splits text into pieces the frontend speaks one after another, sized for
+/// the configured provider.
 #[tauri::command]
-pub fn split_tts_text(text: String) -> Vec<String> {
-    split_text(&text, MAX_SEGMENT_CHARS)
+pub fn split_tts_text(state: State<'_, AppState>, text: String) -> Vec<String> {
+    let max_chars = match state.config.get().tts.provider {
+        TtsProvider::Openai => MAX_SEGMENT_CHARS,
+        TtsProvider::Baidu => baidu::MAX_SEGMENT_CHARS,
+    };
+    split_text(&text, max_chars)
 }
 
 /// Packs whole sentences into segments of at most `max_chars` characters,

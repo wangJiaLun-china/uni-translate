@@ -3,6 +3,7 @@ use std::sync::Mutex;
 
 use tauri::async_runtime::JoinHandle;
 
+use crate::baidu::BaiduTts;
 use crate::client::{Endpoint, OpenAiClient};
 use crate::config::{ConfigStore, Settings};
 use crate::history::History;
@@ -18,6 +19,7 @@ pub struct AppState {
     pub config: ConfigStore,
     pub secrets: SecretStore,
     pub client: OpenAiClient,
+    pub baidu: BaiduTts,
     pub history: History,
     /// Keyed by window label.
     pub tasks: Mutex<HashMap<String, Task>>,

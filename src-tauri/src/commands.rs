@@ -35,6 +35,9 @@ pub fn save_settings(
 /// An empty key deletes the stored one.
 #[tauri::command]
 pub fn set_api_key(state: State<'_, AppState>, kind: KeyKind, key: String) -> AppResult<()> {
+    if matches!(kind, KeyKind::BaiduApiKey | KeyKind::BaiduSecretKey) {
+        state.baidu.clear_token();
+    }
     state.secrets.set(kind, &key)
 }
 
