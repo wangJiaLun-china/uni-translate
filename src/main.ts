@@ -14,6 +14,8 @@ const app = createApp(App).use(createPinia()).use(router);
 const label = getCurrentWebviewWindow().label;
 if (label === "popup") {
   await router.replace("/popup");
+} else if (label === "capture") {
+  await router.replace("/capture");
 } else if (label === "manage") {
   await router.replace((await takeManageRoute()) ?? "/settings");
   // Sent when the window is already open and the card or tray asks for a page.

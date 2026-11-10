@@ -17,10 +17,15 @@ export interface Settings {
   baseUrl: string;
   model: string;
   temperature: number;
+  /** Ask reasoning models to answer without thinking first. */
+  disableThinking: boolean;
+  /** Model that reads screenshots; empty means `model`. */
+  visionModel: string;
   targetLang: string;
   secondaryLang: string;
   tts: TtsSettings;
   hotkey: string;
+  screenshotHotkey: string;
   historyEnabled: boolean;
 }
 

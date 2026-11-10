@@ -1,4 +1,5 @@
 mod baidu;
+mod capture;
 mod client;
 mod commands;
 mod config;
@@ -30,11 +31,10 @@ use crate::state::AppState;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Must come first: a second launch just focuses the running app.
-    let builder = tauri::Builder::default().plugin(tauri_plugin_single_instance::init(
-        |app, _args, _cwd| {
+    let builder =
+        tauri::Builder::default().plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             windows::show_main(app);
-        },
-    ));
+        }));
     #[cfg(target_os = "macos")]
     let builder = builder.plugin(tauri_nspanel::init());
     builder
@@ -59,12 +59,18 @@ pub fn run() {
                 history: History::open(&data_dir.join("history.db"))?,
                 tasks: Mutex::default(),
                 pending_selection: Mutex::default(),
+                pending_image: Mutex::default(),
+                screen: Mutex::default(),
                 manage_route: Mutex::default(),
             };
-            let hotkey = state.config.get().hotkey;
+            let settings = state.config.get();
             app.manage(state);
 
-            if let Err(err) = selection::register(app.handle(), &hotkey) {
+            let hotkeys = [
+                settings.hotkey.as_str(),
+                settings.screenshot_hotkey.as_str(),
+            ];
+            if let Err(err) = selection::register(app.handle(), &hotkeys) {
                 log::warn!("{err}");
             }
             windows::create_tray(app.handle())?;
@@ -98,6 +104,10 @@ pub fn run() {
             tts::speak,
             tts::split_tts_text,
             selection::take_pending_selection,
+            translate::recognize_image,
+            capture::screen_image,
+            capture::finish_capture,
+            capture::cancel_capture,
             windows::open_manage,
             windows::take_manage_route,
         ])

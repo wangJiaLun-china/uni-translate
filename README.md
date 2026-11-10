@@ -11,6 +11,7 @@ A lightweight AI translator for any OpenAI-compatible API, built with Tauri 2 (R
 - **流式翻译**：译文逐字显示，可以随时停止
 - **自动识别源语言**：原文已经是目标语言时，自动改译成「第二目标语言」（默认中英互译）
 - **划词翻译**：在任意程序中选中文字，按全局快捷键（默认 `Alt+D`），光标旁会弹出同样的翻译卡片
+- **截图翻译**：按截图快捷键（默认 `Alt+S`）框选屏幕上的一块区域，模型识别出图里的文字后自动翻译。需要支持图片输入的模型，可以在设置里单独指定「截图识别模型」
 - **语音朗读**：通过 OpenAI 兼容的 `/audio/speech` 接口朗读，长文本自动分段
 - **翻译历史**：本地 SQLite 保存最近 1000 条，可搜索、复制、朗读、删除
 - **托盘常驻**：关闭卡片只是隐藏，点托盘图标可以重新打开，从托盘菜单退出
@@ -29,7 +30,25 @@ A lightweight AI translator for any OpenAI-compatible API, built with Tauri 2 (R
 | 豆包（火山方舟） | `https://ark.cn-beijing.volces.com/api/v3` | 模型名或接入点 ID |
 | Ollama（本地） | `http://localhost:11434/v1` | `qwen2.5:7b` |
 
-点「获取模型列表」可以读取接口的 `/models`（部分服务不支持，手动填写即可），点「测试连接」会发一条短翻译来验证配置。
+| 腾讯云 TokenHub | `https://tokenhub.tencentmaas.com/plan/v3` | `deepseek-v4-flash-0731` |
+
+点「获取模型列表」可以读取接口的 `/models`（部分服务不支持，比如 TokenHub，手动填写即可），点「测试连接」会发一条短翻译来验证配置。
+
+「关闭模型思考」默认开启：请求里带上 `reasoning_effort: "none"`，推理模型就不会先「思考」再回答，翻译快好几倍。个别模型不接受这个参数或温度设置时（比如 GLM、Kimi 返回 400），应用会自动改用不带这两项的普通请求。有的模型会把 `<think>…</think>` 直接写进回答，这一段也会被自动去掉。
+
+### 腾讯云 TokenHub 实测
+
+2026 年 11 月，用应用自己的翻译提示词测了 TokenHub 上的模型（关闭思考，每个模型 3 轮、每轮 4 句，取中位数）：
+
+| 模型 | 首字 | 总耗时 | 识别图片 |
+|---|---|---|---|
+| **`deepseek-v4-flash-0731`**（推荐） | 2.0 秒 | 2.3 秒 | 支持，约 3 秒 |
+| `deepseek-v4.1-flash-1017` | 2.1 秒 | 2.4 秒 | — |
+| `hy4`（腾讯混元） | 2.2 秒 | 2.7 秒 | 支持，约 4 秒 |
+| `minimax-m2.7` | 2.6 秒 | 2.9 秒 | — |
+| `mimo-v2.6-flash` | 2.9 秒 | 3.7 秒 | 支持，约 5 秒 |
+
+几个模型的译文质量相近。`deepseek-v4-flash-0731` 最快，也能直接识别截图，翻译和截图识别用它一个就够了。不关闭思考时，`auto`、`glm-5.2`、`hy4` 等要等 12–30 秒才出第一个字。
 
 ### 语音朗读
 
@@ -47,9 +66,9 @@ BAIDU_API_KEY=… BAIDU_SECRET_KEY=… cargo test live_baidu -- --ignored
 
 ## 平台说明
 
-- **macOS**：以菜单栏应用运行，不显示 Dock 图标，翻译卡片、设置和历史都从菜单栏图标打开；这样划词卡片会出现在当前桌面，而不是把你切回主卡片所在的桌面。划词翻译需要模拟 `⌘C` 读取选中文字，首次使用请在「系统设置 → 隐私与安全性 → 辅助功能」中允许 uni-translate。
-- **Windows**：划词翻译通过模拟 `Ctrl+C` 实现，读取后会恢复原来的剪贴板文字。
-- **Linux**：直接读取 X11 的 PRIMARY 选区，不需要模拟按键。Wayland 下全局快捷键和选区读取受合成器限制，可能无法使用。朗读需要系统装有 GStreamer 的 MP3 解码插件（如 `gstreamer1.0-plugins-good`）。
+- **macOS**：以菜单栏应用运行，不显示 Dock 图标，翻译卡片、设置和历史都从菜单栏图标打开；这样划词卡片会出现在当前桌面，而不是把你切回主卡片所在的桌面。划词翻译需要模拟 `⌘C` 读取选中文字，首次使用请在「系统设置 → 隐私与安全性 → 辅助功能」中允许 uni-translate。截图翻译使用系统自带的框选（和 `⌘⇧4` 一样），首次使用时需要在「系统设置 → 隐私与安全性 → 屏幕录制」中允许 uni-translate。
+- **Windows**：划词翻译通过模拟 `Ctrl+C` 实现，读取后会恢复原来的剪贴板文字。截图翻译会截下光标所在的屏幕，在上面拖动框选区域，Esc 或右键取消。
+- **Linux**：直接读取 X11 的 PRIMARY 选区，不需要模拟按键。Wayland 下全局快捷键和选区读取受合成器限制，可能无法使用。朗读需要系统装有 GStreamer 的 MP3 解码插件（如 `gstreamer1.0-plugins-good`）。截图翻译和 Windows 一样框选；Wayland 下截图走 PipeWire，可能会先弹出系统的授权窗口。
 
 ## 开发
 
@@ -57,7 +76,8 @@ BAIDU_API_KEY=… BAIDU_SECRET_KEY=… cargo test live_baidu -- --ignored
 
 ```bash
 sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev \
-  libssl-dev libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev
+  libssl-dev libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev \
+  libpipewire-0.3-dev libgbm-dev libegl-dev libclang-dev   # 截图
 ```
 
 ```bash

@@ -3,7 +3,7 @@ use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State, WebviewWindow};
 
-use crate::client::{ChatMessage, ChatRequest, Chunk, Endpoint, OpenAiClient};
+use crate::client::{ChatMessage, ChatRequest, Chunk, Endpoint, OpenAiClient, ThinkFilter};
 use crate::error::{AppError, AppResult};
 use crate::history::NewEntry;
 use crate::lang::{self, Language};
@@ -39,15 +39,16 @@ pub fn build_messages(text: &str, target: &Language) -> Vec<ChatMessage> {
         target.name, target.english
     );
     vec![
-        ChatMessage {
-            role: "system",
-            content: system,
-        },
-        ChatMessage {
-            role: "user",
-            content: text.to_string(),
-        },
+        ChatMessage::text("system", system),
+        ChatMessage::text("user", text),
     ]
+}
+
+/// Prompt for reading the text out of a screenshot.
+const RECOGNIZE_PROMPT: &str = "识别图片中的全部文字，按原样逐行输出。只输出图片里的文字，不要翻译、不要解释、不要添加任何额外内容。";
+
+fn thinking(disable: bool) -> Option<&'static str> {
+    disable.then_some("none")
 }
 
 /// Starts a streaming translation and returns its request id. A new request
@@ -82,7 +83,8 @@ pub async fn translate(
         request: ChatRequest {
             model: settings.model.clone(),
             messages: build_messages(&text, &target),
-            temperature: settings.temperature,
+            temperature: Some(settings.temperature),
+            reasoning_effort: thinking(settings.disable_thinking),
             stream: true,
             max_tokens: None,
         },
@@ -91,23 +93,84 @@ pub async fn translate(
         target,
         save_history: settings.history_enabled,
     };
-    let id = job.id.clone();
+    let (id, label) = (job.id.clone(), job.label.clone());
+    spawn_task(&state, label, id.clone(), run(app.clone(), job, on_event));
+    Ok(id)
+}
 
+/// Runs `task` as the window's current request, cancelling the previous one.
+fn spawn_task(
+    state: &AppState,
+    label: String,
+    id: String,
+    task: impl std::future::Future<Output = ()> + Send + 'static,
+) {
     // Hold the lock while spawning so the task cannot finish (and clean up)
     // before it is registered.
     let mut tasks = state.tasks.lock().unwrap();
-    if let Some(old) = tasks.remove(&job.label) {
+    if let Some(old) = tasks.remove(&label) {
         old.handle.abort();
     }
-    let label = job.label.clone();
-    let handle = tauri::async_runtime::spawn(run(app.clone(), job, on_event));
-    tasks.insert(
-        label,
-        Task {
-            id: id.clone(),
-            handle,
-        },
-    );
+    let handle = tauri::async_runtime::spawn(task);
+    tasks.insert(label, Task { id, handle });
+}
+
+/// Forgets the window's request `id` once it has finished.
+fn finish_task(state: &AppState, label: &str, id: &str) {
+    let mut tasks = state.tasks.lock().unwrap();
+    if tasks.get(label).is_some_and(|task| task.id == id) {
+        tasks.remove(label);
+    }
+}
+
+/// Reads the text out of the last screenshot, streaming it like a
+/// translation, and returns the request id.
+#[tauri::command]
+pub async fn recognize_image(
+    app: AppHandle,
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    on_event: Channel<StreamEvent>,
+) -> AppResult<String> {
+    let png = state
+        .pending_image
+        .lock()
+        .unwrap()
+        .take()
+        .ok_or_else(|| AppError::invalid("没有待识别的截图"))?;
+    let settings = state.config.get();
+    if settings.vision_model().is_empty() {
+        return Err(AppError::invalid("请先在设置中填写模型名称"));
+    }
+    let endpoint = state.chat_endpoint(&settings);
+    let request = ChatRequest {
+        model: settings.vision_model().to_string(),
+        messages: vec![ChatMessage::with_png(RECOGNIZE_PROMPT, &png)],
+        temperature: Some(0.0),
+        reasoning_effort: thinking(settings.disable_thinking),
+        stream: true,
+        max_tokens: None,
+    };
+    let id = uuid::Uuid::new_v4().to_string();
+    let label = window.label().to_string();
+    let task = {
+        let (id, label) = (id.clone(), label.clone());
+        async move {
+            let state = app.state::<AppState>();
+            let result = stream_chat(&state.client, &endpoint, &request, |text| {
+                let _ = on_event.send(StreamEvent::Delta { text });
+            })
+            .await;
+            let _ = on_event.send(match result {
+                Ok(full_text) => StreamEvent::Done { full_text },
+                Err(err) => StreamEvent::Error {
+                    message: err.to_string(),
+                },
+            });
+            finish_task(&state, &label, &id);
+        }
+    };
+    spawn_task(&state, label, id.clone(), task);
     Ok(id)
 }
 
@@ -169,14 +232,11 @@ async fn run(app: AppHandle, job: Job, channel: Channel<StreamEvent>) {
         }
     }
 
-    let mut tasks = state.tasks.lock().unwrap();
-    if tasks.get(&job.label).is_some_and(|task| task.id == job.id) {
-        tasks.remove(&job.label);
-    }
+    finish_task(&state, &job.label, &job.id);
 }
 
 /// Runs a streaming chat request, calling `on_delta` for each piece of text,
-/// and returns the full text.
+/// and returns the full text. A leading `<think>` block is dropped.
 async fn stream_chat(
     client: &OpenAiClient,
     endpoint: &Endpoint,
@@ -184,16 +244,21 @@ async fn stream_chat(
     mut on_delta: impl FnMut(String),
 ) -> AppResult<String> {
     let mut stream = client.chat_stream(endpoint, request).await?;
+    let mut filter = ThinkFilter::default();
     let mut full_text = String::new();
+    let mut emit = |text: String| {
+        if !text.is_empty() {
+            full_text.push_str(&text);
+            on_delta(text);
+        }
+    };
     while let Some(chunk) = stream.next().await {
         match chunk? {
-            Chunk::Delta(text) => {
-                full_text.push_str(&text);
-                on_delta(text);
-            }
+            Chunk::Delta(text) => emit(filter.push(&text)),
             Chunk::Done => break,
         }
     }
+    emit(filter.finish());
     Ok(full_text)
 }
 
@@ -205,6 +270,7 @@ pub async fn test_connection(
     base_url: String,
     model: String,
     api_key: Option<String>,
+    disable_thinking: Option<bool>,
 ) -> AppResult<String> {
     let model = model.trim().to_string();
     if model.is_empty() {
@@ -214,7 +280,8 @@ pub async fn test_connection(
     let request = ChatRequest {
         model,
         messages: build_messages("Hello, world!", lang::find("zh-CN").unwrap()),
-        temperature: 0.0,
+        temperature: Some(0.0),
+        reasoning_effort: thinking(disable_thinking.unwrap_or(true)),
         stream: true,
         max_tokens: Some(32),
     };
@@ -254,7 +321,11 @@ mod tests {
     fn prompt_names_the_target_language() {
         let messages = build_messages("hello", lang::find("ja").unwrap());
         assert_eq!(messages[0].role, "system");
-        assert!(messages[0].content.contains("日语（Japanese）"));
+        assert!(messages[0]
+            .content
+            .as_str()
+            .unwrap()
+            .contains("日语（Japanese）"));
         assert_eq!(messages[1].content, "hello");
     }
 
@@ -275,5 +346,58 @@ mod tests {
             serde_json::to_string(&event).unwrap(),
             r#"{"type":"done","fullText":"好"}"#
         );
+    }
+
+    /// Calls a real OpenAI-compatible service. Configure it from the
+    /// environment; `OCR_IMAGE` (a PNG path) also checks reading a screenshot:
+    /// `OPENAI_BASE_URL=… OPENAI_API_KEY=… OPENAI_MODEL=… cargo test live_openai -- --ignored --nocapture`
+    #[tokio::test]
+    #[ignore = "needs an API key and network access"]
+    async fn live_openai_compatible() {
+        let var = |name: &str| std::env::var(name).unwrap_or_else(|_| panic!("{name} not set"));
+        let endpoint = Endpoint {
+            base_url: var("OPENAI_BASE_URL"),
+            api_key: Some(var("OPENAI_API_KEY")),
+        };
+        let model = var("OPENAI_MODEL");
+        let client = OpenAiClient::new();
+
+        let started = std::time::Instant::now();
+        let request = ChatRequest {
+            model: model.clone(),
+            messages: build_messages(
+                "Good morning! The meeting moved to 3 pm.",
+                lang::find("zh-CN").unwrap(),
+            ),
+            temperature: Some(0.3),
+            reasoning_effort: thinking(true),
+            stream: true,
+            max_tokens: None,
+        };
+        let text = stream_chat(&client, &endpoint, &request, |_| {})
+            .await
+            .unwrap();
+        println!("translation ({:.2?}): {text}", started.elapsed());
+        assert!(text.contains('3') && !text.contains("<think>"), "{text}");
+
+        if let Ok(path) = std::env::var("OCR_IMAGE") {
+            let started = std::time::Instant::now();
+            let request = ChatRequest {
+                model,
+                messages: vec![ChatMessage::with_png(
+                    RECOGNIZE_PROMPT,
+                    &std::fs::read(path).unwrap(),
+                )],
+                temperature: Some(0.0),
+                reasoning_effort: thinking(true),
+                stream: true,
+                max_tokens: None,
+            };
+            let text = stream_chat(&client, &endpoint, &request, |_| {})
+                .await
+                .unwrap();
+            println!("recognized ({:.2?}): {text}", started.elapsed());
+            assert!(!text.trim().is_empty());
+        }
     }
 }

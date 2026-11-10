@@ -1,4 +1,5 @@
-//! Global hotkey: grab the selected text and show it in the popup window.
+//! Global hotkeys: grab the selected text (or start a screenshot) and show it
+//! in the popup window.
 
 #[cfg(not(target_os = "macos"))]
 use tauri::PhysicalPosition;
@@ -16,8 +17,14 @@ const POPUP_SIZE: (f64, f64) = (380.0, 220.0);
 
 pub fn plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     tauri_plugin_global_shortcut::Builder::new()
-        .with_handler(|app, _shortcut, event| {
-            if event.state() == ShortcutState::Pressed {
+        .with_handler(|app, shortcut, event| {
+            if event.state() != ShortcutState::Pressed {
+                return;
+            }
+            let screenshot = app.state::<AppState>().config.get().screenshot_hotkey;
+            if parse(&screenshot).is_ok_and(|s| s.id() == shortcut.id()) {
+                crate::capture::on_hotkey(app);
+            } else {
                 on_hotkey(app);
             }
         })
@@ -30,22 +37,52 @@ fn parse(hotkey: &str) -> AppResult<Shortcut> {
         .map_err(|err| AppError::invalid(format!("快捷键格式无效「{hotkey}」：{err}")))
 }
 
-pub fn register(app: &AppHandle, hotkey: &str) -> AppResult<()> {
-    let shortcut = parse(hotkey)?;
+/// Replaces all global hotkeys with `hotkeys`. Registers as many as it can
+/// and reports the first failure.
+pub fn register(app: &AppHandle, hotkeys: &[&str]) -> AppResult<()> {
+    let parsed = hotkeys
+        .iter()
+        .map(|hotkey| parse(hotkey).map(|shortcut| (*hotkey, shortcut)))
+        .collect::<AppResult<Vec<_>>>()?;
+    for (i, (_, a)) in parsed.iter().enumerate() {
+        if parsed[..i].iter().any(|(_, b)| a.id() == b.id()) {
+            return Err(AppError::invalid("划词翻译和截图翻译不能使用同一个快捷键"));
+        }
+    }
     let shortcuts = app.global_shortcut();
     let _ = shortcuts.unregister_all();
-    shortcuts.register(shortcut).map_err(|err| {
-        AppError::invalid(format!(
-            "快捷键「{hotkey}」注册失败，可能已被其他程序占用：{err}"
-        ))
-    })
+    let mut first_error = None;
+    for (hotkey, shortcut) in parsed {
+        if let Err(err) = shortcuts.register(shortcut) {
+            first_error.get_or_insert(AppError::invalid(format!(
+                "快捷键「{hotkey}」注册失败，可能已被其他程序占用：{err}"
+            )));
+        }
+    }
+    first_error.map_or(Ok(()), Err)
 }
 
-/// Switches to `new`, keeping `old` registered if `new` cannot be registered.
-pub fn replace(app: &AppHandle, old: &str, new: &str) -> AppResult<()> {
+/// Switches to `new`, restoring `old` if any of `new` cannot be registered.
+pub fn replace(app: &AppHandle, old: &[&str], new: &[&str]) -> AppResult<()> {
     register(app, new).inspect_err(|_| {
         let _ = register(app, old);
     })
+}
+
+/// Shows the popup beside wherever the pointer is now.
+pub fn show_popup_at_pointer(app: &AppHandle) -> AppResult<()> {
+    #[cfg(target_os = "macos")]
+    {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let app_for_ui = app.clone();
+        app.run_on_main_thread(move || {
+            let _ = tx.send(place_popup_macos(&app_for_ui, macos_mouse_location()));
+        })?;
+        rx.recv_timeout(std::time::Duration::from_secs(2))
+            .map_err(|_| AppError::invalid("显示弹窗超时"))?
+    }
+    #[cfg(not(target_os = "macos"))]
+    show_popup(app)
 }
 
 fn on_hotkey(app: &AppHandle) {
@@ -114,10 +151,12 @@ fn show_popup(app: &AppHandle) -> AppResult<()> {
 }
 
 /// Gap between the pointer and the card, in screen points.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 const CURSOR_GAP: (f64, f64) = (12.0, 16.0);
 
 /// Top-left of the card in a bottom-left screen coordinate system.
 /// `screen` is `(x, y, width, height)` of the visible area under the pointer.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn popup_top_left(
     cursor: (f64, f64),
     window: (f64, f64),

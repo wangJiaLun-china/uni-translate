@@ -129,7 +129,7 @@ async function test() {
   testing.value = true;
   testResult.value = null;
   try {
-    const reply = await api.testConnection(form.value.baseUrl, form.value.model, keys.chat);
+    const reply = await api.testConnection(form.value.baseUrl, form.value.model, keys.chat, form.value.disableThinking);
     testResult.value = { ok: true, message: `连接成功：「${reply}」` };
   } catch (err) {
     testResult.value = { ok: false, message: api.errorMessage(err) };
@@ -186,6 +186,25 @@ async function previewVoice() {
         <span>温度（Temperature）：{{ form.temperature.toFixed(1) }}</span>
         <input v-model.number="form.temperature" type="range" min="0" max="1.5" step="0.1" />
       </label>
+
+      <label class="check">
+        <input v-model="form.disableThinking" type="checkbox" />
+        关闭模型思考（推荐，明显更快）
+      </label>
+      <p class="muted small">
+        很多模型会先「思考」再回答，翻译时没有必要。个别模型不接受这个参数或温度设置时，会自动改用普通请求。
+      </p>
+
+      <label class="field">
+        <span>截图识别模型</span>
+        <input
+          v-model="form.visionModel"
+          class="input"
+          :placeholder="form.model ? `留空则使用 ${form.model}` : '留空则使用上面的模型'"
+          spellcheck="false"
+        />
+      </label>
+      <p class="muted small">截图翻译时用它识别图片里的文字，需要支持图片输入。</p>
 
       <div class="row">
         <button class="btn" :disabled="!form.baseUrl || !form.model || testing" @click="test">
@@ -337,6 +356,14 @@ async function previewVoice() {
       </label>
       <p class="muted small">
         选中任意文字后按下快捷键即可翻译。macOS 需要在「系统设置 → 隐私与安全性 → 辅助功能」中允许本应用。
+      </p>
+
+      <label class="field">
+        <span>截图翻译快捷键</span>
+        <HotkeyInput v-model="form.screenshotHotkey" />
+      </label>
+      <p class="muted small">
+        按下快捷键后框选屏幕上的一块区域，识别出文字后自动翻译。macOS 首次使用时需要在「系统设置 → 隐私与安全性 → 屏幕录制」中允许本应用。
       </p>
 
       <label class="check">

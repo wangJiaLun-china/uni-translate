@@ -5,7 +5,8 @@
   "windows": [
     "main",
     "popup",
-    "manage"
+    "manage",
+    "capture"
   ],
   "permissions": [
     "core:default",

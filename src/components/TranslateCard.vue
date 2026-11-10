@@ -1,11 +1,13 @@
 <script setup lang="ts">
+import { Channel } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { computed, nextTick, ref, watch } from "vue";
-import { copyText, openManage } from "../api/commands";
+import { cancelTranslation, copyText, errorMessage, openManage, recognizeImage } from "../api/commands";
 import { useAutoHeight } from "../composables/useAutoHeight";
 import { toast } from "../composables/useToast";
 import { useTranslator } from "../composables/useTranslator";
 import { useSettingsStore } from "../stores/settings";
+import type { StreamEvent } from "../types";
 import Icon from "./Icon.vue";
 import SpeakButton from "./SpeakButton.vue";
 
@@ -17,7 +19,12 @@ const props = defineProps<{ mode: "main" | "popup" }>();
 const emit = defineEmits<{ close: [] }>();
 
 const store = useSettingsStore();
-const { result, error, status, busy, translate, stop, reset } = useTranslator();
+const translator = useTranslator();
+const { result, error, status, translate, reset } = translator;
+/** Reading text out of a screenshot, before translating it. */
+const recognizing = ref(false);
+let recognition: { id: string | null; generation: number } = { id: null, generation: 0 };
+const busy = computed(() => recognizing.value || translator.busy.value);
 const source = ref("");
 const card = ref<HTMLElement | null>(null);
 const input = ref<HTMLTextAreaElement | null>(null);
@@ -27,8 +34,58 @@ const needsSetup = ref(false);
 useAutoHeight(card);
 
 const hasMeaning = computed(
-  () => needsSetup.value || !!result.value || !!error.value || status.value === "loading",
+  () =>
+    needsSetup.value || recognizing.value || !!result.value || !!error.value || status.value === "loading",
 );
+
+function stopRecognizing() {
+  recognition.generation++;
+  if (recognition.id) void cancelTranslation(recognition.id);
+  recognition.id = null;
+  recognizing.value = false;
+}
+
+function stop() {
+  stopRecognizing();
+  translator.stop();
+}
+
+/** Streams the text of the pending screenshot into the source box, then translates it. */
+async function recognize() {
+  stop();
+  reset();
+  source.value = "";
+  needsSetup.value = !store.configured;
+  if (needsSetup.value) return;
+  const generation = ++recognition.generation;
+  recognizing.value = true;
+  const channel = new Channel<StreamEvent>();
+  channel.onmessage = (event) => {
+    if (generation !== recognition.generation) return;
+    if (event.type === "delta") {
+      source.value += event.text;
+    } else if (event.type === "done") {
+      recognizing.value = false;
+      recognition.id = null;
+      source.value = event.fullText.trim();
+      if (source.value) run();
+      else error.value = "截图里没有识别到文字。";
+    } else if (event.type === "error") {
+      recognizing.value = false;
+      recognition.id = null;
+      error.value = `${event.message}（如果模型不支持图片，可以在设置里换一个截图识别模型）`;
+    }
+  };
+  try {
+    const id = await recognizeImage(channel);
+    if (generation === recognition.generation) recognition.id = id;
+    else void cancelTranslation(id);
+  } catch (err) {
+    if (generation !== recognition.generation) return;
+    recognizing.value = false;
+    error.value = errorMessage(err);
+  }
+}
 
 function run() {
   if (!source.value.trim()) return;
@@ -86,6 +143,7 @@ function openSettings() {
 defineExpose({
   /** Shows `text` and translates it, or focuses the empty box. */
   async setSource(text: string) {
+    stopRecognizing();
     source.value = text;
     needsSetup.value = false;
     if (text.trim()) {
@@ -97,6 +155,7 @@ defineExpose({
     }
   },
   focus: () => input.value?.focus(),
+  recognize,
   stop,
 });
 </script>
@@ -134,6 +193,7 @@ defineExpose({
       </template>
       <p v-else-if="error" class="problem">{{ error }}</p>
       <p v-else-if="result" class="text">{{ result }}<span v-if="busy" class="caret" /></p>
+      <p v-else-if="recognizing" class="pending">正在识别截图里的文字…</p>
       <p v-else class="pending">正在翻译…</p>
     </section>
 

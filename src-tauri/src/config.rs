@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::{AppError, AppResult};
 
 pub const DEFAULT_HOTKEY: &str = "Alt+D";
+pub const DEFAULT_SCREENSHOT_HOTKEY: &str = "Alt+S";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -15,11 +16,17 @@ pub struct Settings {
     pub base_url: String,
     pub model: String,
     pub temperature: f32,
+    /// Ask reasoning models to answer without thinking first. Much faster for
+    /// translation, with no visible loss in quality.
+    pub disable_thinking: bool,
+    /// Model that reads text out of screenshots; empty means `model`.
+    pub vision_model: String,
     pub target_lang: String,
     /// Used instead of `target_lang` when the source text is already in it.
     pub secondary_lang: String,
     pub tts: TtsSettings,
     pub hotkey: String,
+    pub screenshot_hotkey: String,
     pub history_enabled: bool,
 }
 
@@ -29,10 +36,13 @@ impl Default for Settings {
             base_url: String::new(),
             model: String::new(),
             temperature: 0.3,
+            disable_thinking: true,
+            vision_model: String::new(),
             target_lang: "zh-CN".into(),
             secondary_lang: "en".into(),
             tts: TtsSettings::default(),
             hotkey: DEFAULT_HOTKEY.into(),
+            screenshot_hotkey: DEFAULT_SCREENSHOT_HOTKEY.into(),
             history_enabled: true,
         }
     }
@@ -84,6 +94,8 @@ impl Settings {
         self.base_url = normalize_base_url(&self.base_url);
         self.model = self.model.trim().to_string();
         self.hotkey = self.hotkey.trim().to_string();
+        self.screenshot_hotkey = self.screenshot_hotkey.trim().to_string();
+        self.vision_model = self.vision_model.trim().to_string();
         self.tts.base_url = normalize_base_url(&self.tts.base_url);
         self.tts.model = self.tts.model.trim().to_string();
         self.tts.voice = self.tts.voice.trim().to_string();
@@ -94,7 +106,22 @@ impl Settings {
         if self.hotkey.is_empty() {
             self.hotkey = DEFAULT_HOTKEY.into();
         }
+        if self.screenshot_hotkey.is_empty() {
+            self.screenshot_hotkey = DEFAULT_SCREENSHOT_HOTKEY.into();
+        }
+        if self.hotkey.eq_ignore_ascii_case(&self.screenshot_hotkey) {
+            return Err(AppError::invalid("划词翻译和截图翻译不能使用同一个快捷键"));
+        }
         Ok(self)
+    }
+
+    /// The model that reads screenshots.
+    pub fn vision_model(&self) -> &str {
+        if self.vision_model.is_empty() {
+            &self.model
+        } else {
+            &self.vision_model
+        }
     }
 }
 
@@ -189,6 +216,9 @@ mod tests {
         assert_eq!(s.tts.voice, "nova");
         assert_eq!(s.tts.model, "tts-1");
         assert!(s.tts.use_same_endpoint);
+        assert!(s.disable_thinking);
+        assert_eq!(s.screenshot_hotkey, DEFAULT_SCREENSHOT_HOTKEY);
+        assert_eq!(s.vision_model(), "");
         assert_eq!(s.tts.provider, TtsProvider::Openai);
         assert_eq!(s.tts.baidu_voice, 0);
 
@@ -211,6 +241,12 @@ mod tests {
         assert_eq!(s.base_url, "https://a/v1");
         assert_eq!(s.hotkey, DEFAULT_HOTKEY);
         assert_eq!(s.temperature, 2.0);
+
+        let same = Settings {
+            screenshot_hotkey: "alt+d".into(),
+            ..Settings::default()
+        };
+        assert!(same.normalized().is_err());
 
         let bad = Settings {
             base_url: "api.x.com".into(),

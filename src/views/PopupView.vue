@@ -35,6 +35,13 @@ function onKeydown(event: KeyboardEvent) {
 onMounted(async () => {
   window.addEventListener("keydown", onKeydown);
   unlisten.push(await listen("popup://selection", loadSelection));
+  // A screenshot is waiting: read its text, then translate it.
+  unlisten.push(
+    await listen("popup://capture", async () => {
+      await store.load();
+      card.value?.recognize();
+    }),
+  );
   unlisten.push(
     await win.onFocusChanged(({ payload: focused }) => {
       if (!focused && !pinned.value) hide();

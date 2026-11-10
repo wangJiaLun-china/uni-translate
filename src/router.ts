@@ -8,6 +8,8 @@ export const router = createRouter({
     { path: "/", component: CardView, meta: { bare: true } },
     // The hotkey popup window.
     { path: "/popup", component: () => import("./views/PopupView.vue"), meta: { bare: true } },
+    // The screenshot region picker (Windows and Linux).
+    { path: "/capture", component: () => import("./views/CaptureView.vue"), meta: { bare: true } },
     // The settings/history window.
     { path: "/history", component: () => import("./views/HistoryView.vue") },
     { path: "/settings", component: () => import("./views/SettingsView.vue") },

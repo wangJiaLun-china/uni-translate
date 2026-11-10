@@ -20,9 +20,29 @@ export const translate = (text: string, targetLang: string | null, onEvent: Chan
 
 export const cancelTranslation = (id: string) => invoke<void>("cancel_translation", { id });
 
+/** Reads the text out of the last screenshot, streaming it; resolves to the request id. */
+export const recognizeImage = (onEvent: Channel<StreamEvent>) => invoke<string>("recognize_image", { onEvent });
+
+/** The full screenshot behind the region picker, as JPEG. */
+export const screenImage = () => invoke<ArrayBuffer>("screen_image");
+
+/** A dragged-out region and the picker's size, in CSS pixels. */
+export interface CaptureSelection {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  viewWidth: number;
+  viewHeight: number;
+}
+
+export const finishCapture = (selection: CaptureSelection) => invoke<void>("finish_capture", { selection });
+
+export const cancelCapture = () => invoke<void>("cancel_capture");
+
 /** An empty `apiKey` means "use the saved key". */
-export const testConnection = (baseUrl: string, model: string, apiKey: string) =>
-  invoke<string>("test_connection", { baseUrl, model, apiKey });
+export const testConnection = (baseUrl: string, model: string, apiKey: string, disableThinking: boolean) =>
+  invoke<string>("test_connection", { baseUrl, model, apiKey, disableThinking });
 
 export const listModels = (baseUrl: string, apiKey: string) =>
   invoke<string[]>("list_models", { baseUrl, apiKey });

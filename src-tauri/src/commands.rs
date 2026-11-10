@@ -25,8 +25,12 @@ pub fn save_settings(
 ) -> AppResult<Settings> {
     let settings = settings.normalized()?;
     let old = state.config.get();
-    if settings.hotkey != old.hotkey {
-        selection::replace(&app, &old.hotkey, &settings.hotkey)?;
+    if (&settings.hotkey, &settings.screenshot_hotkey) != (&old.hotkey, &old.screenshot_hotkey) {
+        selection::replace(
+            &app,
+            &[&old.hotkey, &old.screenshot_hotkey],
+            &[&settings.hotkey, &settings.screenshot_hotkey],
+        )?;
     }
     state.config.save(settings.clone())?;
     Ok(settings)

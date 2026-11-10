@@ -25,6 +25,10 @@ pub struct AppState {
     pub tasks: Mutex<HashMap<String, Task>>,
     /// Text grabbed by the hotkey, waiting for the popup to pick it up.
     pub pending_selection: Mutex<Option<String>>,
+    /// A cropped screenshot (PNG) waiting for the popup to read it.
+    pub pending_image: Mutex<Option<Vec<u8>>>,
+    /// The full screenshot while the region overlay is open.
+    pub screen: Mutex<Option<image::RgbaImage>>,
     /// Page the settings/history window should open on once it loads.
     pub manage_route: Mutex<Option<String>>,
 }
