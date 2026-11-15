@@ -1,6 +1,6 @@
 # uni-translate
 
-一个轻量的 AI 翻译桌面应用。只需选择目标语言，源语言自动识别；对接任何 **OpenAI 兼容接口**，DeepSeek、通义千问、智谱、Kimi、豆包、Ollama 等都能用。
+一个轻量的 AI 翻译桌面应用。只需选择目标语言，源语言自动识别；对接任何 **OpenAI 兼容接口**，腾讯云 TokenHub、DeepSeek、通义千问、智谱、Kimi、Ollama 等都能用。
 
 A lightweight AI translator for any OpenAI-compatible API, built with Tauri 2 (Rust) and Vue 3.
 
@@ -22,11 +22,11 @@ A lightweight AI translator for any OpenAI-compatible API, built with Tauri 2 (R
 
 | 服务 | 接口地址（Base URL） | 模型示例 |
 |---|---|---|
+| 腾讯云 TokenHub（Token Plan） | `https://tokenhub.tencentmaas.com/plan/v3` | `glm-5.2`（推荐）、`deepseek-v4-flash-0731`、`auto` |
 | DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` |
 | 通义千问 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` |
 | 智谱 GLM | `https://open.bigmodel.cn/api/paas/v4` | `glm-4-flash` |
 | Kimi | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` |
-| 豆包（火山方舟） | `https://ark.cn-beijing.volces.com/api/v3` | 模型名或接入点 ID |
 | Ollama（本地） | `http://localhost:11434/v1` | `qwen2.5:7b` |
 
 点「获取模型列表」可以读取接口的 `/models`（部分服务不支持，手动填写即可），点「测试连接」会发一条短翻译来验证配置。

@@ -148,11 +148,11 @@ async function previewVoice() {
   <div v-if="form" class="settings">
     <section class="card">
       <h2>翻译接口</h2>
-      <p class="muted small">支持任何 OpenAI 兼容接口，如 DeepSeek、通义千问、智谱、Kimi、豆包、Ollama 等。</p>
+      <p class="muted small">支持任何 OpenAI 兼容接口，如腾讯云 TokenHub、DeepSeek、通义千问、智谱、Kimi、Ollama 等。</p>
 
       <label class="field">
         <span>接口地址（Base URL）</span>
-        <input v-model="form.baseUrl" class="input" placeholder="例如 https://api.deepseek.com/v1" spellcheck="false" />
+        <input v-model="form.baseUrl" class="input" placeholder="例如 https://tokenhub.tencentmaas.com/plan/v3" spellcheck="false" />
       </label>
 
       <label class="field">
@@ -172,7 +172,7 @@ async function previewVoice() {
       <label class="field">
         <span>模型</span>
         <div class="row">
-          <input v-model="form.model" class="input" list="model-options" placeholder="例如 deepseek-chat" spellcheck="false" />
+          <input v-model="form.model" class="input" list="model-options" placeholder="例如 glm-5.2" spellcheck="false" />
           <datalist id="model-options">
             <option v-for="m in models" :key="m" :value="m" />
           </datalist>

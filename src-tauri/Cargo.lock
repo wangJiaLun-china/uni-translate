@@ -4689,7 +4689,7 @@ dependencies = [
 
 [[package]]
 name = "uni-translate"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "arboard",
  "enigo",
